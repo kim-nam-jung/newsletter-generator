@@ -35,16 +35,6 @@
 4.  PDF 파일을 업로드하면 자동으로 이미지가 잘려서 삽입됩니다.
 5.  작업이 끝나면 **"Export"** 버튼을 눌러 HTML 파일을 다운로드하세요.
 
-## 배포 (Deployment)
-
-웹 서버에 배포하려면:
-1.  이 코드를 자신의 GitHub 저장소에 푸시합니다.
-2.  Vercel, Railway, Render 등의 배포 플랫폼에 저장소를 연결합니다.
-3.  빌드 설정:
-    - Build Command: `npm run build`
-    - Output Directory: `dist`
-4.  시작 명령어 (Start Command): `npm run dev:server` (프로덕션 환경에 맞춰 설정 필요)
-
 ## 기술 스택 (Technologies)
 
 - React (Vite)
