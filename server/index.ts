@@ -69,14 +69,14 @@ app.post('/api/open-folder', (req, res) => {
 
 // API Endpoints
 app.post('/api/upload', upload.single('file'), async (req, res) => {
-  console.log('[API] /api/upload request received');
+
   try {
     if (!req.file) {
-      console.log('[API] No file received');
+
       return res.status(400).json({ error: 'No file uploaded' });
     }
     
-    console.log(`[API] Processing file: ${req.file.path} (${req.file.mimetype})`);
+
     const { sliceHeight } = req.body;
     const height = sliceHeight ? parseInt(sliceHeight) : 0; // Default to 0 (no slice)
 
@@ -105,7 +105,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return `/uploads/${fileName}`;
     });
 
-    console.log(`[API] Success. Saved and returning ${imageUrls.length} image URLs.`);
+
     
     // Also generate HTML for preview/export if needed, but the client currently requests HTML generation?
     // Wait, the client usually requests HTML generation separately or constructs it?
@@ -304,7 +304,7 @@ app.post('/api/newsletters', (req, res) => {
 
     fs.writeFileSync(filePath, JSON.stringify(newsletter, null, 2));
     
-    console.log(`[API] Saved newsletter: ${newsletterId} (${newsletter.title})`);
+
     res.json({ success: true, id: newsletterId, newsletter });
   } catch (error) {
     console.error('[API] Error saving newsletter:', error);
@@ -374,7 +374,7 @@ app.post('/api/export', (req, res) => {
     const fullPath = path.join(exportPath, filename);
     fs.writeFileSync(fullPath, html, 'utf-8');
     
-    console.log(`[API] Exported HTML to: ${fullPath}`);
+
     res.json({ success: true, path: fullPath });
   } catch (error) {
     console.error('Export failed:', error);

@@ -10,21 +10,21 @@ export interface ProcessedSlice {
 }
 
 export async function processFile(filePath: string, mimeType: string, sliceHeight: number) {
-  console.log(`[Processor] Processing file: ${filePath}, type: ${mimeType}, slice: ${sliceHeight}`);
+
   let images: Buffer[] = [];
   let links: LinkInfo[][] = [];
 
   try {
     if (mimeType === 'application/pdf') {
-        console.log('[Processor] Converting PDF to images...');
+
         const result = await convertPdfToImages(filePath);
         images = result.images;
         links = result.links;
-        console.log(`[Processor] PDF converted. Pages: ${images.length}`);
+
 
         // Merge pages if there are multiple
         if (images.length > 1) {
-            console.log('[Processor] Merging multiple pages into one...');
+
             
             // 1. Get metadata for all pages to calculate dimensions
             const pageMetas = await Promise.all(images.map(img => sharp(img).metadata()));
@@ -72,18 +72,18 @@ export async function processFile(filePath: string, mimeType: string, sliceHeigh
             // Replace images and links with the single merged result
             images = [mergedImage];
             links = [mergedLinks];
-            console.log(`[Processor] Merged ${compositeOperations.length} pages. Total height: ${totalHeight}`);
+
         }
 
     } else {
-        console.log('[Processor] Reading image file...');
+
         images = [fs.readFileSync(filePath)];
         links = [[]];
-        console.log('[Processor] Image read.');
+
     }
 
     // Slice each image
-    console.log('[Processor] Slicing images...');
+
     let finalSlices: ProcessedSlice[] = [];
     
     // If sliceHeight is 0, we still need to process it through our pipeline (resize + link scaling)
@@ -137,7 +137,7 @@ export async function processFile(filePath: string, mimeType: string, sliceHeigh
              });
         }
     }
-    console.log(`[Processor] Slicing complete. Total slices: ${finalSlices.length}`);
+
 
     return { slices: finalSlices };
   } catch (err) {

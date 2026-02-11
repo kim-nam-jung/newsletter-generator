@@ -21,12 +21,12 @@ export const uploadImage = async (file: File, sliceHeight: number): Promise<Slic
   formData.append('file', file);
   formData.append('sliceHeight', sliceHeight.toString());
 
-  console.log('[Client] Uploading to /api/upload...');
+
   const response = await fetch('/api/upload', {
     method: 'POST',
     body: formData,
   });
-  console.log(`[Client] Response status: ${response.status}`);
+
 
   if (!response.ok) {
     const text = await response.text();
