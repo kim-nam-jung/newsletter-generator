@@ -1,0 +1,158 @@
+.uploader-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.height-presets {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.height-presets .label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.preset-buttons {
+  display: flex;
+  gap: 5px;
+  background: #f3f4f6;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.preset-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn:hover:not(:disabled) {
+  color: #111827;
+}
+
+.preset-btn.active {
+  background: white;
+  color: #2563eb;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.preset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.drop-zone {
+  border: 2px dashed #e5e7eb;
+  border-radius: 12px;
+  padding: 30px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #f9fafb;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.drop-zone:hover:not(.processing) {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.drop-zone.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  transform: scale(1.01);
+}
+
+.file-input {
+  display: none;
+}
+
+.upload-prompt, .file-info, .processing-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.icon-upload {
+  color: #9ca3af;
+  margin-bottom: 5px;
+}
+
+.drop-zone:hover .icon-upload {
+  color: #2563eb;
+}
+
+.main-text {
+  font-weight: 600;
+  color: #374151;
+  margin: 0;
+}
+
+.sub-text {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.icon-success {
+  color: #10b981;
+}
+
+.file-name {
+  font-weight: 600;
+  color: #111827;
+  font-size: 14px;
+  margin: 0;
+}
+
+/* Progress Bar */
+.progress-bar {
+  width: 100%;
+  max-width: 200px;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #2563eb;
+  transition: width 0.3s ease;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
