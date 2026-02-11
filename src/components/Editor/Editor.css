@@ -4,6 +4,13 @@
   font-size: 16px;
 }
 
+/* Ensure toolbar wraps on small screens */
+.rich-text-editor .ql-toolbar {
+  flex-wrap: wrap;
+  display: flex;
+  gap: 4px;
+}
+
 .block-list {
   display: flex;
   flex-direction: column;

@@ -4,7 +4,7 @@ import { Preview } from './components/Preview';
 
 import { BlockList } from './components/Editor/BlockList';
 import type { Block, NewsletterSummary } from './types';
-import { Mail, Settings, Download, FolderOpen, Trash2 } from 'lucide-react';
+import { Mail, Settings, Download, FolderOpen, Trash2, Menu } from 'lucide-react';
 import { useToast } from './components/Toast';
 import { SettingsModal } from './components/SettingsModal';
 
@@ -27,6 +27,9 @@ function App() {
   // Settings State
   const [showSettings, setShowSettings] = useState(false);
   const [exportPath, setExportPath] = useState('');
+  
+  // Mobile Sidebar State
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Resize State
   const [editorWidth, setEditorWidth] = useState(50); // Percentage
@@ -505,10 +508,17 @@ function App() {
     }
   };
 
+
+
   return (
     <div className="app-container">
-      {/* Sidebar */}
-      <aside className="app-sidebar">
+      {/* Mobile Overlay */}
+      <div
+        className={`sidebar-overlay ${isSidebarOpen ? 'visible' : ''}`}
+        onClick={() => setIsSidebarOpen(false)}
+      />
+
+      <aside className={`app-sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
            <button className="new-btn" onClick={handleNewNewsletter}>
              <span>+</span> New Newsletter
@@ -519,13 +529,13 @@ function App() {
            {savedNewsletters.length === 0 && <p className="empty-list">No saved items.</p>}
            <ul>
              {savedNewsletters.map(n => (
-                 <li 
-                   key={n.id} 
+                 <li
+                   key={n.id}
                    className={n.id === newsletterId ? 'active' : ''}
                    onClick={() => loadNewsletter(n.id)}
                  >
                     <span className="item-title">{n.title}</span>
-                    <button 
+                    <button
                        className="delete-item-btn"
                        onClick={(e) => handleDeleteNewsletter(e, n.id, n.title)}
                        title="Delete"
@@ -540,13 +550,30 @@ function App() {
 
       <div className="main-layout">
         <header className="app-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <Mail color="#2563eb" size={32} />
-                <div>
-                  <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600 }}>Newsletter Editor</h2>
-                  <small style={{ color: '#666', display: 'block', marginTop: '2px' }}>{title}</small>
-                </div>
-              </div>
+          <div className="header-brand">
+            {/* Mobile Menu Button */}
+            <button
+              className="icon-btn"
+              style={{ display: 'none', marginRight: '8px' }} // Hidden on desktop via CSS media query ideally, but inline style request
+              id="mobile-menu-btn"
+              onClick={() => setIsSidebarOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
+            <Mail className="brand-icon" />
+            <h2>Newsletter Editor</h2>
+            {newsletterId && (
+              <span style={{
+                fontSize: '0.8rem',
+                color: '#6b7280',
+                background: '#f3f4f6',
+                padding: '2px 8px',
+                borderRadius: '12px'
+              }}>
+                Editing
+              </span>
+            )}
+          </div>
           <div className="header-actions">
             <button className="icon-btn" onClick={handleOpenFolder} title={exportPath ? `Open Folder: ${exportPath}` : 'Open Export Folder'}>
               <FolderOpen size={20} />

@@ -42,12 +42,50 @@ h1 {
 /* Sidebar Styles */
 .app-sidebar {
   width: 260px;
-  background-color: #f9fafb; /* Lighter, cleaner gray */
-  border-right: 1px solid #f3f4f6; /* Very subtle border */
+  background-color: #f9fafb;
+  border-right: 1px solid #f3f4f6;
   padding: 1.5rem 1rem;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  transition: transform 0.3s ease-in-out;
+  z-index: 20;
+}
+
+/* Mobile Sidebar Drawer */
+@media (max-width: 768px) {
+  .app-sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    background: white;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+    transform: translateX(-100%);
+  }
+
+  .app-sidebar.open {
+    transform: translateX(0);
+  }
+  
+  /* Overlay when sidebar is open */
+  .sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 15;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  
+  .sidebar-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .main-layout {
@@ -251,23 +289,28 @@ h1 {
   }
   
   .app-header h2 {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .mobile-tabs {
     display: flex;
+    flex-shrink: 0;
+  }
+
+  .app-content {
+    flex-direction: column;
   }
 
   .editor-panel, .preview-panel {
     min-width: 0;
     width: 100%;
-    padding: 20px;
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    display: none; /* Hidden by default toggled by class */
+    padding: 10px; /* Reduced padding */
+    position: relative; /* Changed from absolute to flow naturally if needed, or keep absolute for tab switch */
+    display: none; 
+    flex: 1;
   }
 
   .editor-panel.active {
@@ -276,6 +319,17 @@ h1 {
   
   .preview-panel.active {
     display: flex;
+  }
+  
+  /* Hide resizer on mobile */
+  .resizer {
+    display: none;
+  }
+}
+
+  /* Show mobile menu button */
+  #mobile-menu-btn {
+    display: flex !important;
   }
 }
 
