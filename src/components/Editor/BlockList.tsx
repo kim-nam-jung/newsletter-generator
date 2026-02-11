@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
-import type { Block, BlockType } from '../../types';
+import React, { useState } from 'react';
+import type { Block, BlockType, ImageBlock } from '../../types';
 import { RichTextEditor } from './RichTextEditor';
-import { Trash2, GripVertical, Plus, Image as ImageIcon, Type, Link as LinkIcon, X } from 'lucide-react';
+import { GripVertical, Image as ImageIcon, Type, Link as LinkIcon, X } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { FileUploader } from '../FileUploader';
 import { uploadImage } from '../../services/api';
@@ -91,17 +91,17 @@ export const BlockList: React.FC<BlockListProps> = ({ blocks, setBlocks }) => {
       });
       
       showToast(`Successfully added ${slices.length} image slice(s)`, 'success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      alert(`Upload Error: ${error.message}`); // Force visibility
-      showToast(error.message || 'Failed to upload image', 'error');
+      // alert(`Upload Error: ${error instanceof Error ? error.message : String(error)}`); // Removed alert, relying on Toast
+      showToast(error instanceof Error ? error.message : 'Failed to upload image', 'error');
     } finally {
       setUploadingBlockId(null);
     }
   };
 
   const updateBlock = (id: string, updates: Partial<Block>) => {
-    setBlocks(blocks.map(b => b.id === id ? { ...b, ...updates } : b));
+    setBlocks(blocks.map(b => b.id === id ? { ...b, ...updates } as Block : b));
   };
 
   const deleteBlock = (id: string) => {
@@ -169,6 +169,58 @@ const SortableBlockItem: React.FC<SortableBlockItemProps> = ({ block, updateBloc
 
   const [linkInputVisible, setLinkInputVisible] = useState(false);
 
+  const renderContent = () => {
+    if (block.type === 'placeholder') {
+      return (
+        <div className="placeholder-block">
+          {onUpload && <FileUploader onUpload={onUpload} isProcessing={!!uploading} />}
+        </div>
+      );
+    }
+
+    if (block.type === 'text') {
+      return (
+        <RichTextEditor 
+          content={block.content} 
+          onChange={(val) => updateBlock(block.id, { content: val })} 
+        />
+      );
+    }
+
+    // Image Block
+    const imgBlock = block as ImageBlock;
+    return (
+      <div className="image-block-wrapper">
+        <div className="image-block">
+          <img src={imgBlock.src} alt="Newsletter Content" />
+          {imgBlock.link && <div className="link-badge"><LinkIcon size={12} /> {imgBlock.link}</div>}
+        </div>
+        
+        <div className="image-actions">
+           <button 
+             className={`link-btn ${linkInputVisible || imgBlock.link ? 'active' : ''}`}
+             onClick={() => setLinkInputVisible(!linkInputVisible)}
+             title="Add Link to Image"
+           >
+             <LinkIcon size={16} /> {imgBlock.link ? 'Edit Link' : 'Add Link'}
+           </button>
+        </div>
+
+        {linkInputVisible && (
+          <div className="link-input-popover">
+            <input 
+              type="text" 
+              placeholder="https://example.com" 
+              value={imgBlock.link || ''} 
+              onChange={(e) => updateBlock(block.id, { link: e.target.value })}
+            />
+            <button onClick={() => setLinkInputVisible(false)}>Done</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div ref={setNodeRef} style={style} className="block-item">
       <div className="block-controls-persistent">
@@ -182,46 +234,7 @@ const SortableBlockItem: React.FC<SortableBlockItemProps> = ({ block, updateBloc
         <X size={18} />
       </button>
 
-      {block.type === 'placeholder' && onUpload ? (
-        <div className="placeholder-block">
-
-             <FileUploader onUpload={onUpload} isProcessing={!!uploading} />
-        </div>
-      ) : block.type === 'text' ? (
-        <RichTextEditor 
-          content={block.content} 
-          onChange={(val) => updateBlock(block.id, { content: val })} 
-        />
-      ) : (
-        <div className="image-block-wrapper">
-          <div className="image-block">
-            <img src={block.src} alt="Newsletter Content" />
-            {block.link && <div className="link-badge"><LinkIcon size={12} /> {block.link}</div>}
-          </div>
-          
-          <div className="image-actions">
-             <button 
-               className={`link-btn ${linkInputVisible || block.link ? 'active' : ''}`}
-               onClick={() => setLinkInputVisible(!linkInputVisible)}
-               title="Add Link to Image"
-             >
-               <LinkIcon size={16} /> {block.link ? 'Edit Link' : 'Add Link'}
-             </button>
-          </div>
-
-          {linkInputVisible && (
-            <div className="link-input-popover">
-              <input 
-                type="text" 
-                placeholder="https://example.com" 
-                value={block.link || ''} 
-                onChange={(e) => updateBlock(block.id, { link: e.target.value })}
-              />
-              <button onClick={() => setLinkInputVisible(false)}>Done</button>
-            </div>
-          )}
-        </div>
-      )}
+      {renderContent()}
     </div>
   );
 };

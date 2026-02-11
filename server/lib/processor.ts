@@ -1,6 +1,5 @@
 import { convertPdfToImages, LinkInfo } from './pdf-converter';
-import { sliceImage, SliceInfo } from './image-slicer';
-import { generateHtml } from './html-generator';
+import { sliceImage } from './image-slicer';
 import fs from 'fs';
 import sharp from 'sharp';
 
@@ -84,7 +83,7 @@ export async function processFile(filePath: string, mimeType: string, sliceHeigh
 
     // Slice each image
 
-    let finalSlices: ProcessedSlice[] = [];
+    const finalSlices: ProcessedSlice[] = [];
     
     // If sliceHeight is 0, we still need to process it through our pipeline (resize + link scaling)
     // But sliceImage handles resizing to 800px.

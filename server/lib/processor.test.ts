@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { processFile } from './processor';
 import sharp from 'sharp';
-import path from 'path';
+
 
 // Mock pdf-converter
 vi.mock('./pdf-converter', () => ({
@@ -52,7 +52,6 @@ describe('Processor', () => {
     const result = await processFile('dummy.pdf', 'application/pdf', 0);
     
     expect(result.slices).toHaveLength(1); // Should be 1 slice because height is 0 (infinite)
-    const sliceBuffer = result.slices[0].buffer;
     const links = result.slices[0].links;
 
     // Verify links

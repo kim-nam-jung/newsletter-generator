@@ -8,7 +8,8 @@ interface RichTextEditorProps {
   onChange: (content: string) => void;
 }
 
-const Font = ReactQuill.Quill.import('formats/font');
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Font = ReactQuill.Quill.import('formats/font') as unknown as any;
 // Whitelist of fonts
 Font.whitelist = [
   'malgun-gothic', 
@@ -82,6 +83,7 @@ const formats = [
 
 export const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange }) => {
   // Generate unique ID for this editor's toolbar
+  // eslint-disable-next-line react-hooks/purity
   const toolbarId = useMemo(() => `toolbar-${Math.random().toString(36).substring(2, 9)}`, []);
 
   const modules = useMemo(() => ({

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { Image, createCanvas } from '@napi-rs/canvas';
 
 // window polyfill
@@ -44,7 +46,7 @@ if ((global as any).window && !(global as any).window.requestAnimationFrame) {
 
 // Promise.withResolvers polyfill
 if (typeof Promise.withResolvers === 'undefined') {
-    // @ts-ignore
+    // @ts-expect-error Polyfill for Promise.withResolvers which might be missing in older Node types
     Promise.withResolvers = function () {
         let resolve, reject;
         const promise = new Promise((res, rej) => {

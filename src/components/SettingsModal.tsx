@@ -13,6 +13,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, c
   const [path, setPath] = useState(currentPath);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPath(currentPath);
   }, [currentPath, isOpen]);
 

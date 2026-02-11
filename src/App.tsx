@@ -1,12 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import { Preview } from './components/Preview';
 
 import { BlockList } from './components/Editor/BlockList';
-import type { Block } from './types';
+import type { Block, NewsletterSummary } from './types';
 import { Mail, Settings, Download, FolderOpen, Trash2 } from 'lucide-react';
 import { useToast } from './components/Toast';
 import { SettingsModal } from './components/SettingsModal';
+
+const escapeHtml = (str: string) =>
+  str.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const isValidUrl = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:', 'mailto:'].includes(parsed.protocol);
+  } catch { return false; }
+};
 
 function App() {
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -24,7 +35,43 @@ function App() {
   // Save/Load State
   const [newsletterId, setNewsletterId] = useState<string | null>(null);
   const [title, setTitle] = useState('Untitled Newsletter');
-  const [savedNewsletters, setSavedNewsletters] = useState<any[]>([]);
+  const [savedNewsletters, setSavedNewsletters] = useState<NewsletterSummary[]>([]);
+
+  // History State
+  const [history, setHistory] = useState<Block[][]>([[]]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  // Undo/Redo Handlers
+  const updateBlocks = useCallback((newBlocksOrFn: Block[] | ((prev: Block[]) => Block[])) => {
+    setBlocks(prev => {
+      const nextBlocks = typeof newBlocksOrFn === 'function' ? newBlocksOrFn(prev) : newBlocksOrFn;
+      
+      // Only update history if blocks actually changed and it's not a re-render
+      if (JSON.stringify(prev) !== JSON.stringify(nextBlocks)) {
+        const newHistory = history.slice(0, historyIndex + 1);
+        newHistory.push(nextBlocks);
+        setHistory(newHistory);
+        setHistoryIndex(newHistory.length - 1);
+      }
+      return nextBlocks;
+    });
+  }, [history, historyIndex]);
+
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setBlocks(history[newIndex]);
+    }
+  }, [history, historyIndex]);
+
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setBlocks(history[newIndex]);
+    }
+  }, [history, historyIndex]);
 
   // Load Settings on Mount
   useEffect(() => {
@@ -37,7 +84,7 @@ function App() {
   }, []);
 
   // Resize Handlers
-  const startResizing = (_mouseDownEvent: React.MouseEvent) => {
+  const startResizing = () => {
       setIsResizing(true);
   };
 
@@ -45,7 +92,7 @@ function App() {
       setIsResizing(false);
   };
 
-  const resize = (mouseMoveEvent: MouseEvent) => {
+  const resize = useCallback((mouseMoveEvent: MouseEvent) => {
       if (isResizing) {
           const mainLayout = document.querySelector('.main-layout');
           if (mainLayout) {
@@ -56,7 +103,7 @@ function App() {
               }
           }
       }
-  };
+  }, [isResizing]);
 
   useEffect(() => {
       window.addEventListener('mousemove', resize);
@@ -65,7 +112,7 @@ function App() {
           window.removeEventListener('mousemove', resize);
           window.removeEventListener('mouseup', stopResizing);
       };
-  }, [isResizing]);
+  }, [resize]);
 
   // Load newsletters on mount & Restore state
   useEffect(() => {
@@ -77,6 +124,9 @@ function App() {
               const { id, title: savedTitle, blocks: savedBlocks } = JSON.parse(savedDraft);
               if (savedBlocks && savedBlocks.length > 0) {
                   setBlocks(savedBlocks);
+                  // Reset history for loaded draft
+                  setHistory([savedBlocks]);
+                  setHistoryIndex(0);
                   setNewsletterId(id || null);
                   setTitle(savedTitle || 'Untitled Newsletter');
               }
@@ -111,19 +161,23 @@ function App() {
               const data = await res.json();
               setSavedNewsletters(data);
           }
-      } catch (error) {
-          console.error('Failed to load list', error);
+      } catch {
+          console.error('Failed to load list');
       }
   };
 
-  const handleSave = async () => {
+
+  const handleSave = useCallback(async () => {
     let saveTitle = title;
     
     if (!newsletterId && title === 'Untitled Newsletter') {
-        const firstTextBlock = blocks.find(b => b.type === 'text' && b.content);
-        if (firstTextBlock && firstTextBlock.content) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const firstTextBlock = blocks.find(b => b.type === 'text' && (b as any).content);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (firstTextBlock && (firstTextBlock as any).content) {
             const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = firstTextBlock.content;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            tempDiv.innerHTML = (firstTextBlock as any).content;
             const plainText = tempDiv.textContent || '';
             const firstSentence = plainText.split(/[.!?]/)[0].trim().substring(0, 30);
             
@@ -163,14 +217,34 @@ function App() {
         
         const data = await response.json();
         setNewsletterId(data.id);
-        // showToast('Newsletter saved successfully!', 'success');
+        showToast('Newsletter saved successfully!', 'success');
         fetchNewsletters();
     } catch (error) {
         console.error(error);
         console.error('Failed to save newsletter');
-        // showToast('Failed to save newsletter', 'error');
+        showToast('Failed to save newsletter', 'error');
     }
-  };
+  }, [blocks, title, newsletterId, savedNewsletters, showToast]);
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 's') {
+          e.preventDefault();
+          handleSave();
+        } else if (e.key === 'z') {
+          e.preventDefault();
+          undo();
+        } else if (e.key === 'y') {
+          e.preventDefault();
+          redo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSave, undo, redo]);
 
   const loadNewsletter = async (id: string) => {
       try {
@@ -178,19 +252,25 @@ function App() {
           if (res.ok) {
               const data = await res.json();
               setBlocks(data.blocks || []);
+              // Reset History
+              setHistory([data.blocks || []]);
+              setHistoryIndex(0);
+              
               setNewsletterId(data.id);
               setTitle(data.title);
               // showToast('Newsletter loaded!', 'success'); // Disabled per user request
           }
-      } catch (error) {
+      } catch {
           console.error('Failed to load newsletter');
-          // showToast('Failed to load newsletter', 'error');
+          showToast('Failed to load newsletter', 'error');
       }
   };
 
   const handleNewNewsletter = () => {
       if (window.confirm('Start a new newsletter? Unsaved changes will be lost.')) {
           setBlocks([]);
+          setHistory([[]]);
+          setHistoryIndex(0);
           setNewsletterId(null);
           setTitle('Untitled Newsletter');
           setActiveTab('editor');
@@ -211,11 +291,11 @@ function App() {
                 }
                 fetchNewsletters();
             } else {
-                alert('Failed to delete newsletter');
+                showToast('Failed to delete newsletter', 'error');
             }
         } catch (error) {
             console.error('Failed to delete', error);
-            alert('Failed to delete newsletter');
+            showToast('Failed to delete newsletter', 'error');
         }
     }
   };
@@ -225,15 +305,19 @@ function App() {
   const generateHtml = (blockList: Block[] = blocks) => {
     const rows = blockList.map(block => {
       if (block.type === 'image') {
+        const safeLink = block.link && isValidUrl(block.link) ? escapeHtml(block.link) : '';
         // 단일 링크 (전체 이미지 클릭)
-        const linkStart = block.link ? `<a href="${block.link}" target="_blank" style="text-decoration: none; display: block;">` : '';
-        const linkEnd = block.link ? '</a>' : '';
+        const linkStart = safeLink ? `<a href="${safeLink}" target="_blank" style="text-decoration: none; display: block;">` : '';
+        const linkEnd = safeLink ? '</a>' : '';
 
         // PDF에서 추출된 오버레이 링크들
         // 서버에서 1600px 기준으로 좌표가 계산되어 있고, display는 800px이므로 0.5 스케일
         const displayScale = 0.5;
-        const overlayLinks = (block.links || []).map(link => `
-          <a href="${link.url}" target="_blank" style="
+        const overlayLinks = (block.links || []).map(link => {
+            if (!isValidUrl(link.url)) return '';
+            const safeUrl = escapeHtml(link.url);
+            return `
+          <a href="${safeUrl}" target="_blank" style="
             position: absolute;
             left: ${link.x * displayScale}px;
             top: ${link.y * displayScale}px;
@@ -241,8 +325,8 @@ function App() {
             height: ${link.height * displayScale}px;
             z-index: 10;
             cursor: pointer;
-          " title="${link.url}"></a>
-        `).join('');
+          " title="${safeUrl}"></a>
+        `}).join('');
 
         // 오버레이 링크가 있으면 position: relative 컨테이너 필요
         if (overlayLinks) {
@@ -304,7 +388,7 @@ function App() {
       });
       setExportPath(path);
       // showToast('Settings saved', 'success');
-    } catch (err) {
+    } catch {
       console.error('Failed to save settings');
       // showToast('Failed to save settings', 'error');
     }
@@ -364,7 +448,6 @@ function App() {
     // Case 2: No Default Path (Client-side Save As Dialog)
     try {
       // Try Native File System Access API
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ('showSaveFilePicker' in window) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const handle = await (window as any).showSaveFilePicker({
@@ -501,7 +584,7 @@ function App() {
             style={{ width: `${editorWidth}%`, flex: 'none' }}
           >
             <h3>Editor</h3>
-            <BlockList blocks={blocks} setBlocks={setBlocks} />
+            <BlockList blocks={blocks} setBlocks={updateBlocks} />
           </aside>
 
           {/* Resizer Handle */}

@@ -31,3 +31,9 @@ export interface PlaceholderBlock extends BaseBlock {
 }
 
 export type Block = TextBlock | ImageBlock | PlaceholderBlock;
+
+export interface NewsletterSummary {
+  id: string;
+  title: string;
+  updatedAt: number;
+}

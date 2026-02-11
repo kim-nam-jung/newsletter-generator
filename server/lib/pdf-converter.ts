@@ -21,11 +21,11 @@ export async function convertPdfToImages(filePath: string): Promise<{ images: Bu
 
   // Configure worker for Node.js environment
   const standardFontDataUrl = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'standard_fonts').split(path.sep).join('/') + '/';
-  // @ts-ignore
+  // @ts-expect-error - GlobalWorkerOptions type mismatch
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.mjs';
 
   const data = new Uint8Array(fs.readFileSync(filePath));
-  // @ts-ignore
+  // @ts-expect-error - getDocument type mismatch
   const loadingTask = pdfjsLib.getDocument({
     data: data,
     standardFontDataUrl: standardFontDataUrl,
@@ -44,7 +44,8 @@ export async function convertPdfToImages(filePath: string): Promise<{ images: Bu
     const context = canvas.getContext('2d');
 
     await page.render({
-      canvasContext: context as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      canvasContext: context as unknown as any,
       viewport: viewport,
     }).promise;
 
@@ -53,7 +54,9 @@ export async function convertPdfToImages(filePath: string): Promise<{ images: Bu
     // Extract annotations
     const annotations = await page.getAnnotations();
     const pageLinks: LinkInfo[] = annotations
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((ann: any) => ann.subtype === 'Link' && ann.url)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((ann: any) => {
         // PDF rect is [x1, y1, x2, y2] where (0,0) is bottom-left
         // Viewport conversion handles the coordinate transform
@@ -69,8 +72,7 @@ export async function convertPdfToImages(filePath: string): Promise<{ images: Bu
         // Note: PDF coordinates y increases UPWARDS. Canvas y increases DOWNWARDS.
         // convertToViewportRectangle handles the flipping.
         
-        const x = rect[0];
-        const y = rect[1]; // Top-left y?
+
         // Actually, let's normalize. 
         // rect usually comes out as [x_min, y_min, x_max, y_max] relative to the canvas.
         // But let's be safe and check min/max.

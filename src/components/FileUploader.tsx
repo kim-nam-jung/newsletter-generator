@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, CheckCircle, File as FileIcon } from 'lucide-react';
+import { Upload, CheckCircle } from 'lucide-react';
 import './FileUploader.css';
 
 interface FileUploaderProps {
@@ -15,8 +15,9 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUpload, isProcessi
 
   // Simulate progress when processing starts
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (isProcessing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProgress(0);
       interval = setInterval(() => {
         setProgress((prev) => {
