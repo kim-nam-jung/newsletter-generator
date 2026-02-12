@@ -6,7 +6,7 @@ interface PreviewProps {
   html: string;
 }
 
-export const Preview: React.FC<PreviewProps> = ({ html }) => {
+export const Preview: React.FC<PreviewProps> = React.memo(({ html }) => {
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
 
   return (
@@ -40,4 +40,4 @@ export const Preview: React.FC<PreviewProps> = ({ html }) => {
       </div>
     </div>
   );
-};
+});

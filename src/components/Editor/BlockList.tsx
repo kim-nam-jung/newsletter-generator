@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import type { Block, BlockType, ImageBlock } from '../../types';
+import type { Block, BlockType, ImageBlock, HtmlBlock, PdfBlock } from '../../types';
 import { RichTextEditor } from './RichTextEditor';
 import { GripVertical, Image as ImageIcon, Type, Link as LinkIcon, X } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { FileUploader } from '../FileUploader';
 import { uploadImage } from '../../services/api';
+import PdfPageRenderer from './PdfPageRenderer';
 import { useToast } from '../../components/Toast';
 import {
   DndContext,
@@ -13,8 +14,8 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  type DragEndEvent,
 } from '@dnd-kit/core';
-import type { DragEndEvent } from '@dnd-kit/core';
 import {
   arrayMove,
   SortableContext,
@@ -25,12 +26,12 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import './Editor.css';
 
-interface BlockListProps {
-  blocks: Block[];
-  setBlocks: React.Dispatch<React.SetStateAction<Block[]>>;
-}
+import { useEditorStore } from '../../stores/editorStore';
 
-export const BlockList: React.FC<BlockListProps> = ({ blocks, setBlocks }) => {
+type BlockListProps = Record<string, never>;
+
+export const BlockList: React.FC<BlockListProps> = () => {
+  const { blocks, setBlocks, addBlock: addBlockToStore } = useEditorStore();
   const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
   const { showToast } = useToast();
 
@@ -56,40 +57,54 @@ export const BlockList: React.FC<BlockListProps> = ({ blocks, setBlocks }) => {
   const addBlock = (type: BlockType, index: number) => {
     if (type === 'image') {
       const newBlock: Block = { id: uuidv4(), type: 'placeholder' };
-      const newBlocks = [...blocks];
-      newBlocks.splice(index, 0, newBlock);
-      setBlocks(newBlocks);
+      addBlockToStore(newBlock, index);
       return;
     }
 
     const newBlock: Block = { id: uuidv4(), type: 'text', content: '' };
-    const newBlocks = [...blocks];
-    newBlocks.splice(index, 0, newBlock);
-    setBlocks(newBlocks);
+    addBlockToStore(newBlock, index);
   };
 
   const handleInlineUpload = async (file: File, sliceHeight: number, blockId: string) => {
     setUploadingBlockId(blockId);
     try {
-      const responseBlocks = await uploadImage(file, sliceHeight);
-      
-      const newBlocks: Block[] = responseBlocks.map(block => {
-          if (block.type === 'image') {
-              return {
-                  id: uuidv4(),
-                  type: 'image',
-                  src: block.src || '',
-                  alt: file.name,
-                  links: block.links || []
-              } as ImageBlock;
-          } else {
-              return {
-                  id: uuidv4(),
-                  type: 'text',
-                  content: block.content || ''
-              } as Block;
-          }
-      });
+      let newBlocks: Block[] = [];
+
+      if (file.type === 'application/pdf') {
+          // Client-side PDF processing
+          const { processPdfFile } = await import('../../services/pdf-client-processor');
+          const pages = await processPdfFile(file);
+          
+          newBlocks = pages.map(page => ({
+              id: uuidv4(),
+              type: 'pdf',
+              src: page.src,
+              content: page.content,
+              links: page.links,
+              width: page.width,
+              height: page.height
+          } as Block)); // Cast to Block (PdfBlock)
+      } else {
+          // Standard Image Upload
+          const responseBlocks = await uploadImage(file, sliceHeight);
+          newBlocks = responseBlocks.map(block => {
+              if (block.type === 'image') {
+                  return {
+                      id: uuidv4(),
+                      type: 'image',
+                      src: block.src || '',
+                      alt: file.name,
+                      links: block.links || [] 
+                  } as ImageBlock;
+              } else {
+                  return {
+                      id: uuidv4(),
+                      type: 'text',
+                      content: block.content || ''
+                  } as Block;
+              }
+          });
+      }
       
       setBlocks(prev => {
         const index = prev.findIndex(b => b.id === blockId);
@@ -111,11 +126,11 @@ export const BlockList: React.FC<BlockListProps> = ({ blocks, setBlocks }) => {
   };
 
   const updateBlock = (id: string, updates: Partial<Block>) => {
-    setBlocks(blocks.map(b => b.id === id ? { ...b, ...updates } as Block : b));
+    useEditorStore.getState().updateBlock(id, updates);
   };
 
   const deleteBlock = (id: string) => {
-    setBlocks(blocks.filter(b => b.id !== id));
+    useEditorStore.getState().deleteBlock(id);
   };
 
   return (
@@ -160,7 +175,9 @@ interface SortableBlockItemProps {
   index: number;
 }
 
-const SortableBlockItem: React.FC<SortableBlockItemProps> = ({ block, updateBlock, deleteBlock, uploading, onUpload, index }) => {
+import equal from 'fast-deep-equal';
+
+const SortableBlockItem: React.FC<SortableBlockItemProps> = React.memo(({ block, updateBlock, deleteBlock, uploading, onUpload, index }) => {
   const {
     attributes,
     listeners,
@@ -196,17 +213,89 @@ const SortableBlockItem: React.FC<SortableBlockItemProps> = ({ block, updateBloc
         />
       );
     }
+    
+    if (block.type === 'html') {
+        const htmlBlock = block as HtmlBlock;
+        return (
+            <div className="html-block-wrapper" style={{ width: '100%', overflow: 'auto' }}>
+                <iframe
+                    title={`PDF Page ${htmlBlock.pageIndex ?? ''}`}
+                    srcDoc={htmlBlock.content}
+                    style={{ width: '100%', border: 'none', minHeight: '600px', display: 'block' }}
+                    sandbox="allow-same-origin allow-scripts allow-popups"
+                    onLoad={(e) => {
+                        const iframe = e.currentTarget;
+                        // Adjust height to fit content
+                        if (iframe.contentWindow) {
+                            try {
+                                const height = iframe.contentWindow.document.body.scrollHeight;
+                                // Add a bit of buffer
+                                iframe.style.height = `${height + 20}px`;
+                            } catch (err) {
+                                console.warn('Could not auto-resize iframe:', err);
+                            }
+                        }
+                    }}
+                />
+            </div>
+        );
+    }
 
-    // Image Block
+    if (block.type === 'pdf') {
+        const pdfBlock = block as PdfBlock;
+        return (
+            <div className="pdf-block-wrapper">
+                <PdfPageRenderer block={pdfBlock} />
+            </div>
+        );
+    }
+
+    // Image Block with Link Overlay
     const imgBlock = block as ImageBlock;
+    
     return (
       <div className="image-block-wrapper">
-        <div className="image-block">
-          <img src={imgBlock.src} alt="Newsletter Content" />
+        <div className="image-block" style={{ position: 'relative' }}>
+          <img 
+            src={imgBlock.src} 
+            alt="Newsletter Content" 
+            style={{ width: '100%', display: 'block' }} 
+            onLoad={() => {
+                // Optional: We might need to store natural dimensions to scale overlays precisely
+                // if the API returns coordinates in PDF points (72dpi) or pixels.
+                // Assuming standard PDF rendering.
+            }}
+          />
+          
+          {/* Render PDF Link Overlays */}
+          {imgBlock.links && imgBlock.links.map((link, i) => (
+             <a 
+               key={i}
+               href={link.url}
+               target="_blank"
+               rel="noopener noreferrer"
+               style={{
+                   position: 'absolute',
+                   left: `${(link.x / (imgBlock.width || 600)) * 100}%`, // Fallback width
+                   top: `${(link.y / (imgBlock.height || 800)) * 100}%`, // Fallback height
+                   width: `${(link.width / (imgBlock.width || 600)) * 100}%`,
+                   height: `${(link.height / (imgBlock.height || 800)) * 100}%`,
+                   backgroundColor: 'rgba(0, 123, 255, 0.1)', // Slight blue tint for debugging/visibility
+                   border: '1px solid rgba(0, 123, 255, 0.3)',
+                   cursor: 'pointer',
+                   display: 'block',
+                   zIndex: 10
+               }}
+               title={link.url}
+             />
+          ))}
+
+          {/* Manual Link Badge (Legacy) */}
           {imgBlock.link && <div className="link-badge"><LinkIcon size={12} /> {imgBlock.link}</div>}
         </div>
         
         <div className="image-actions">
+           {/* Only show "Add Link" if no embedded links exist? Or allow adding a main link? */}
            <button 
              className={`link-btn ${linkInputVisible || imgBlock.link ? 'active' : ''}`}
              onClick={() => setLinkInputVisible(!linkInputVisible)}
@@ -247,7 +336,15 @@ const SortableBlockItem: React.FC<SortableBlockItemProps> = ({ block, updateBloc
       {renderContent()}
     </div>
   );
-};
+}, (prev, next) => {
+  return (
+    equal(prev.block, next.block) &&
+    prev.index === next.index &&
+    prev.uploading === next.uploading &&
+    // Functions are stable from store/parent
+    true 
+  );
+});
 
 interface InsertZoneProps {
   onInsert: (type: BlockType) => void;

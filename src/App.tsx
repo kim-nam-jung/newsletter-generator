@@ -1,80 +1,41 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import './App.css';
+import 'pdfjs-dist/web/pdf_viewer.css';
 import { Preview } from './components/Preview';
 
 import { BlockList } from './components/Editor/BlockList';
-import type { Block, NewsletterSummary } from './types';
+import type { Block } from './types';
 import { Mail, Settings, Download, FolderOpen, Trash2, Menu } from 'lucide-react';
 import { useToast } from './components/Toast';
 import { SettingsModal } from './components/SettingsModal';
+import { escapeHtml, isValidUrl } from './utils';
 
-const escapeHtml = (str: string) =>
-  str.replace(/&/g, '&amp;').replace(/</g, '&lt;')
-     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-const isValidUrl = (url: string) => {
-  try {
-    const parsed = new URL(url);
-    return ['http:', 'https:', 'mailto:'].includes(parsed.protocol);
-  } catch { return false; }
-};
+import { useEditorStore } from './stores/editorStore';
+import { useUIStore } from './stores/uiStore';
+import { useNewsletterStore } from './stores/newsletterStore';
+import { useDebounce } from './utils/useDebounce';
 
 function App() {
-  const [blocks, setBlocks] = useState<Block[]>([]);
+  // Store Hooks
+  const { blocks, setBlocks, undo, redo, reset: resetEditor } = useEditorStore();
+  const { 
+    activeTab, setActiveTab, 
+    showSettings, setShowSettings, 
+    isSidebarOpen, setIsSidebarOpen,
+    editorWidth, setEditorWidth,
+    isResizing, setIsResizing 
+  } = useUIStore();
+  const { 
+    newsletterId, setNewsletterId,
+    title, setTitle,
+    savedNewsletters, setSavedNewsletters,
+    exportPath, setExportPath 
+  } = useNewsletterStore();
+
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
   
-  // Settings State
-  const [showSettings, setShowSettings] = useState(false);
-  const [exportPath, setExportPath] = useState('');
-  
-  // Mobile Sidebar State
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Note: history handling is now in editorStore
 
-  // Resize State
-  const [editorWidth, setEditorWidth] = useState(50); // Percentage
-  const [isResizing, setIsResizing] = useState(false);
-
-  // Save/Load State
-  const [newsletterId, setNewsletterId] = useState<string | null>(null);
-  const [title, setTitle] = useState('Untitled Newsletter');
-  const [savedNewsletters, setSavedNewsletters] = useState<NewsletterSummary[]>([]);
-
-  // History State
-  const [history, setHistory] = useState<Block[][]>([[]]);
-  const [historyIndex, setHistoryIndex] = useState(0);
-
-  // Undo/Redo Handlers
-  const updateBlocks = useCallback((newBlocksOrFn: Block[] | ((prev: Block[]) => Block[])) => {
-    setBlocks(prev => {
-      const nextBlocks = typeof newBlocksOrFn === 'function' ? newBlocksOrFn(prev) : newBlocksOrFn;
-      
-      // Only update history if blocks actually changed and it's not a re-render
-      if (JSON.stringify(prev) !== JSON.stringify(nextBlocks)) {
-        const newHistory = history.slice(0, historyIndex + 1);
-        newHistory.push(nextBlocks);
-        setHistory(newHistory);
-        setHistoryIndex(newHistory.length - 1);
-      }
-      return nextBlocks;
-    });
-  }, [history, historyIndex]);
-
-  const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      setHistoryIndex(newIndex);
-      setBlocks(history[newIndex]);
-    }
-  }, [history, historyIndex]);
-
-  const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      setHistoryIndex(newIndex);
-      setBlocks(history[newIndex]);
-    }
-  }, [history, historyIndex]);
 
   // Load Settings on Mount
   useEffect(() => {
@@ -84,16 +45,16 @@ function App() {
         if (data.exportPath) setExportPath(data.exportPath);
       })
       .catch(err => console.error('Failed to load settings', err));
-  }, []);
+  }, [setExportPath]);
 
   // Resize Handlers
   const startResizing = () => {
       setIsResizing(true);
   };
 
-  const stopResizing = () => {
+  const stopResizing = useCallback(() => {
       setIsResizing(false);
-  };
+  }, [setIsResizing]);
 
   const resize = useCallback((mouseMoveEvent: MouseEvent) => {
       if (isResizing) {
@@ -106,7 +67,7 @@ function App() {
               }
           }
       }
-  }, [isResizing]);
+  }, [isResizing, setEditorWidth]);
 
   useEffect(() => {
       window.addEventListener('mousemove', resize);
@@ -115,21 +76,20 @@ function App() {
           window.removeEventListener('mousemove', resize);
           window.removeEventListener('mouseup', stopResizing);
       };
-  }, [resize]);
+  }, [resize, stopResizing]);
 
   // Load newsletters on mount & Restore state
   useEffect(() => {
       fetchNewsletters();
-      
+
       const savedDraft = sessionStorage.getItem('newsletter_draft');
       if (savedDraft) {
           try {
               const { id, title: savedTitle, blocks: savedBlocks } = JSON.parse(savedDraft);
               if (savedBlocks && savedBlocks.length > 0) {
+                  // 히스토리 초기화 후 블록 설정
+                  resetEditor();
                   setBlocks(savedBlocks);
-                  // Reset history for loaded draft
-                  setHistory([savedBlocks]);
-                  setHistoryIndex(0);
                   setNewsletterId(id || null);
                   setTitle(savedTitle || 'Untitled Newsletter');
               }
@@ -137,27 +97,28 @@ function App() {
               console.error('Failed to restore draft', e);
           }
       }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 마운트 시 1회만 실행
 
   // Persist state to localStorage whenever it changes (Debounced)
+  // Persist state to localStorage (Debounced)
+  const debouncedBlocks = useDebounce(blocks, 1000);
+  const debouncedTitle = useDebounce(title, 1000);
+
   useEffect(() => {
-    const saveToLocalStorage = setTimeout(() => {
-      if (blocks.length > 0 || title !== 'Untitled Newsletter') {
-        const newsletter = {
-          id: newsletterId || Date.now().toString(),
-          title,
-          blocks,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        sessionStorage.setItem('newsletter_draft', JSON.stringify(newsletter));
-      }
-    }, 1000);
+    if (debouncedBlocks.length > 0 || debouncedTitle !== 'Untitled Newsletter') {
+      const newsletter = {
+        id: newsletterId || Date.now().toString(),
+        title: debouncedTitle,
+        blocks: debouncedBlocks,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      sessionStorage.setItem('newsletter_draft', JSON.stringify(newsletter));
+    }
+  }, [debouncedBlocks, debouncedTitle, newsletterId]);
 
-    return () => clearTimeout(saveToLocalStorage);
-  }, [blocks, title, newsletterId]);
-
-  const fetchNewsletters = async () => {
+  const fetchNewsletters = useCallback(async () => {
       try {
           const res = await fetch('/api/newsletters');
           if (res.ok) {
@@ -167,7 +128,7 @@ function App() {
       } catch {
           console.error('Failed to load list');
       }
-  };
+  }, [setSavedNewsletters]);
 
 
   const handleSave = useCallback(async () => {
@@ -227,19 +188,29 @@ function App() {
         console.error('Failed to save newsletter');
         showToast('Failed to save newsletter', 'error');
     }
-  }, [blocks, title, newsletterId, savedNewsletters, showToast]);
+  }, [blocks, title, newsletterId, savedNewsletters, showToast, fetchNewsletters, setNewsletterId, setTitle]);
 
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 입력 필드에서는 기본 브라우저 동작 유지
+      const target = e.target as HTMLElement;
+      const isInputField =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable ||
+        target.closest('.ql-editor'); // Quill 에디터 내부
+
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 's') {
           e.preventDefault();
           handleSave();
-        } else if (e.key === 'z') {
+        } else if (e.key === 'z' && !isInputField) {
+          // 입력 필드가 아닐 때만 전역 undo
           e.preventDefault();
           undo();
-        } else if (e.key === 'y') {
+        } else if (e.key === 'y' && !isInputField) {
+          // 입력 필드가 아닐 때만 전역 redo
           e.preventDefault();
           redo();
         }
@@ -255,9 +226,8 @@ function App() {
           if (res.ok) {
               const data = await res.json();
               setBlocks(data.blocks || []);
-              // Reset History
-              setHistory([data.blocks || []]);
-              setHistoryIndex(0);
+              // Reset History via reload
+              // setHistory([data.blocks || []]); // Handled by store logic or ignored
               
               setNewsletterId(data.id);
               setTitle(data.title);
@@ -271,9 +241,7 @@ function App() {
 
   const handleNewNewsletter = () => {
       if (window.confirm('Start a new newsletter? Unsaved changes will be lost.')) {
-          setBlocks([]);
-          setHistory([[]]);
-          setHistoryIndex(0);
+          resetEditor();
           setNewsletterId(null);
           setTitle('Untitled Newsletter');
           setActiveTab('editor');
@@ -316,7 +284,8 @@ function App() {
         // PDF에서 추출된 오버레이 링크들
         // 서버에서 1600px 기준으로 좌표가 계산되어 있고, display는 800px이므로 0.5 스케일
         const displayScale = 0.5;
-        const overlayLinks = (block.links || []).map(link => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const overlayLinks = (block.links || []).map((link: any) => {
             if (!isValidUrl(link.url)) return '';
             const safeUrl = escapeHtml(link.url);
             return `
@@ -360,6 +329,106 @@ function App() {
             </td>
           </tr>
         `;
+      } else if (block.type === 'pdf') {
+          // Export as Static Image + Links + Text Layer for selection
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pdfLinks = (block.links || []).map((link: any) => {
+             const safeUrl = escapeHtml(link.url);
+             return `
+               <a href="${safeUrl}" target="_blank" class="link-overlay" style="
+                 position: absolute;
+                 left: ${(link.x / (block.width || 600)) * 100}%;
+                 top: ${(link.y / (block.height || 800)) * 100}%;
+                 width: ${(link.width / (block.width || 600)) * 100}%;
+                 height: ${(link.height / (block.height || 800)) * 100}%;
+                 z-index: 20;
+               " title="${safeUrl}"></a>
+             `;
+          }).join('');
+
+          const textLayer = block.content ? `
+            <div class="textLayer" style="
+                width: 100%;
+                height: 100%;
+                /* Scale factor handling? 
+                   PDF.js text layer is absolute px. 
+                   We need to scale it to fit the 100% width of container (max 800px).
+                   If the original PDF width != current display width, transform scale is needed.
+                */
+                transform: scale(calc(100% / ${block.width || 800})); /* Conceptual, CSS calc with 100% doesn't work for scale like this easily without JS */
+                /* Better approach for email/static HTML: 
+                   The container width is fluid (max 800px).
+                   Text layer spans have fixed pixels.
+                   We need a transform on .textLayer.
+                   
+                   Since this is inside email/HTML export, JS execution for resize is limited.
+                   But for 'Preview' in App, it's fine.
+                   For 'Export HTML', we might have issues if client opens on different screen size.
+                   
+                   However, standard practice for HTML email is fixed width or fluid images. 
+                   Text overlay on fluid images is hard.
+                   Let's assume standard width (e.g. 600-800px) or just use the style attribute to set a fixed scale if possible, 
+                   or rely on the fact that '100%' width in CSS might match the PDF extraction width if we force min-width?
+                   
+                   Actually, let's look at PdfPageRenderer. It uses a JS ResizeObserver to set --scale-factor.
+                   In static HTML export, we don't have that.
+                   
+                   Compromise: 
+                   If export is fixed width (800px), we can hardcode scale.
+                   block.width is the original PDF width (e.g. 595pt ~ 793px).
+                   If we enforce max-width 800px, and the PDF was 800px, scale is 1.
+                   
+                   Let's inject a script for the exported HTML to handle scaling if possible? 
+                   Email clients strip JS. So export for email = no text layer usually.
+                   But user wants "Preview" text selection. Preview runs in browser (iframe).
+                   So we can inject a script!
+                */
+            ">
+                ${block.content}
+            </div>
+            <script>
+                // Simple script to scale text layer to match image width
+                (function() {
+                    function scaleTextLayers() {
+                        var containers = document.querySelectorAll('.pdf-container');
+                        containers.forEach(function(container) {
+                            var img = container.querySelector('img');
+                            var textLayer = container.querySelector('.textLayer');
+                            var originalWidth = ${block.width || 800}; // Embed original width
+                            if (img && textLayer && originalWidth) {
+                                var currentWidth = img.clientWidth;
+                                var scale = currentWidth / originalWidth;
+                                textLayer.style.transform = 'scale(' + scale + ')';
+                                textLayer.style.transformOrigin = '0 0';
+                            }
+                        });
+                    }
+                    window.addEventListener('load', scaleTextLayers);
+                    window.addEventListener('resize', scaleTextLayers);
+                })();
+            </script>
+          ` : '';
+
+          // Note: added class pdf-container for script
+          return `
+            <tr>
+               <td align="center" style="padding: 0;">
+                  <div class="pdf-container" style="position: relative; width: 100%; max-width: 800px;">
+                    <img src="${block.src}" style="width: 100%; height: auto; display: block;" />
+                    ${textLayer}
+                    ${pdfLinks}
+                  </div>
+               </td>
+            </tr>
+          `;
+      } else if (block.type === 'html') {
+          return `
+            <tr>
+               <td align="center" style="padding: 0;">
+                  ${block.content}
+               </td>
+            </tr>
+          `;
       }
       return '';
     }).join('');
@@ -370,6 +439,41 @@ function App() {
 <head>
   <meta charset="utf-8">
   <title>${title}</title>
+  <style>
+    body { font-family: sans-serif; }
+    /* Minimal PDF Text Layer CSS */
+    .textLayer {
+      position: absolute;
+      text-align: initial;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+      opacity: 0.2; /* Debug: set to 1 to see text, usually transparent */
+      opacity: 1; /* For selection, we want visible selection highlight but transparent text color */
+      line-height: 1.0;
+      pointer-events: none; /* Let clicks pass through to links if any? Text selection needs events. */
+    }
+    .textLayer span {
+      color: transparent;
+      position: absolute;
+      white-space: pre;
+      cursor: text;
+      transform-origin: 0% 0%;
+      pointer-events: auto; /* Allow text selection */
+    }
+    .textLayer ::selection {
+      background: rgba(0, 0, 255, 0.3);
+      color: transparent;
+    }
+    /* Link overlay style */
+    .link-overlay {
+      position: absolute;
+      z-index: 20;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f4f4f4;">
   <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 800px; background-color: #ffffff; margin: 0 auto;">
@@ -402,16 +506,22 @@ function App() {
 
     // Convert images to Base64 for standalone HTML
     const blocksWithBase64 = await Promise.all(
-      blocks.map(async (block) => {
-        if (block.type === 'image' && block.src.startsWith('/uploads/')) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      blocks.map(async (block: any) => {
+        if ((block.type === 'image' || block.type === 'pdf') && block.src.startsWith('/uploads/')) {
           try {
             const res = await fetch(`/api/image-base64?path=${encodeURIComponent(block.src)}`);
             if (res.ok) {
               const { dataUri } = await res.json();
+              if (block.type === 'pdf') {
+                  // For PDF, ensure the data URI indicates pdf mimetype if api returned generic
+                  const pdfDataUri = dataUri.replace('image/pdf', 'application/pdf'); // Just in case
+                  return { ...block, src: pdfDataUri };
+              }
               return { ...block, src: dataUri };
             }
           } catch (e) {
-            console.error('Failed to convert image to base64', e);
+            console.error('Failed to convert file to base64', e);
           }
         }
         return block;
@@ -611,7 +721,7 @@ function App() {
             style={{ width: `${editorWidth}%`, flex: 'none' }}
           >
             <h3>Editor</h3>
-            <BlockList blocks={blocks} setBlocks={updateBlocks} />
+            <BlockList />
           </aside>
 
           {/* Resizer Handle */}

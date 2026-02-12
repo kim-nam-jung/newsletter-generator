@@ -1,11 +1,5 @@
 // src/services/api.ts
-export interface LinkInfo {
-  url: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import type { LinkInfo } from '../types';
 
 export interface SliceInfo {
   imageUrl: string;
@@ -13,10 +7,13 @@ export interface SliceInfo {
 }
 
 export interface BlockResponse {
-    type: 'image' | 'text';
-    content?: string; // HTML content for text blocks
-    src?: string;     // URL for image blocks
+    type: 'image' | 'text' | 'pdf' | 'html';
+    content?: string; // HTML content for text/html blocks
+    src?: string;     // URL for image/pdf blocks
     links?: LinkInfo[];
+    width?: number;
+    height?: number;
+    pageIndex?: number;
 }
 
 export interface UploadResponse {
