@@ -10,6 +10,7 @@ describe('generateHtml', () => {
             src: 'https://example.com/doc.pdf',
             width: 800,
             height: 1000,
+            content: '<span>Hello World</span>',
             links: [
                 { url: 'https://google.com', x: 100, y: 100, width: 200, height: 50 },
                 { url: 'https://naver.com', x: 400, y: 500, width: 100, height: 100 }
@@ -26,6 +27,10 @@ describe('generateHtml', () => {
 
         // Check for usemap attribute on image
         expect(html).toContain('usemap="#map-test-block-123"');
+
+        // Check for Text Layer presence
+        expect(html).toContain('<div class="textLayer"');
+        expect(html).toContain('Hello World');
 
         // Verify NO absolute positioning overlay divs (old method) for the LINKS
         expect(html).not.toContain('class="link-overlay"');

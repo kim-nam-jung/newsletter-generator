@@ -59,7 +59,10 @@ export const generateHtml = (blockList: Block[], title: string = 'Newsletter') =
         `;
       } else if (block.type === 'pdf') {
           // Export with Image Map for maximum email client compatibility (Outlook, etc.)
-          // Text Layer is removed to prevent layout issues in email clients
+          // Text Layer for text selection and searchability
+          const textLayer = block.content ? 
+              `<div class="textLayer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">${block.content}</div>` 
+              : '';
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const mapName = `map-${block.id}`;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -84,6 +87,7 @@ export const generateHtml = (blockList: Block[], title: string = 'Newsletter') =
                <td align="center" style="padding: 0;">
                   <div class="pdf-container" style="position: relative; width: 100%; max-width: 800px;">
                     <img src="${block.src}" usemap="#${mapName}" style="width: 100%; height: auto; display: block;" border="0" />
+                    ${textLayer}
                     <map name="${mapName}">
                         ${areas}
                     </map>
