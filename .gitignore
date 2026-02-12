@@ -31,3 +31,7 @@ uploads/
 
 # System
 nul
+
+coverage/
+test-results/
+playwright-report/

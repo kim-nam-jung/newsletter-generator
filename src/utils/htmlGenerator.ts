@@ -9,34 +9,30 @@ export const generateHtml = (blockList: Block[], title: string = 'Newsletter') =
         const linkStart = safeLink ? `<a href="${safeLink}" target="_blank" style="text-decoration: none; display: block;">` : '';
         const linkEnd = safeLink ? '</a>' : '';
 
-        // PDF에서 추출된 오버레이 링크들
-        // 서버에서 1600px 기준으로 좌표가 계산되어 있고, display는 800px이므로 0.5 스케일
-        const displayScale = 0.5;
+        // PDF에서 추출된 오버레이 링크들 — 이미지맵 방식 (Outlook 호환)
+        const mapName = `map-${block.id}`;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const overlayLinks = (block.links || []).map((link: any) => {
+        const areas = (block.links || []).map((link: any) => {
             if (!isValidUrl(link.url)) return '';
             const safeUrl = escapeHtml(link.url);
-            return `
-          <a href="${safeUrl}" target="_blank" style="
-            position: absolute;
-            left: ${link.x * displayScale}px;
-            top: ${link.y * displayScale}px;
-            width: ${link.width * displayScale}px;
-            height: ${link.height * displayScale}px;
-            z-index: 10;
-            cursor: pointer;
-          " title="${safeUrl}"></a>
-        `}).join('');
+            // Scale from natural image dimensions to 800px display width
+            const scale = 800 / (block.width || 800);
+            const x1 = Math.round(link.x * scale);
+            const y1 = Math.round(link.y * scale);
+            const x2 = Math.round((link.x + link.width) * scale);
+            const y2 = Math.round((link.y + link.height) * scale);
+            return `<area shape="rect" coords="${x1},${y1},${x2},${y2}" href="${safeUrl}" target="_blank" alt="Link" />`;
+        }).join('');
 
-        // 오버레이 링크가 있으면 position: relative 컨테이너 필요
-        if (overlayLinks) {
+        // 이미지맵이 있으면 usemap 속성 추가
+        if (areas) {
           return `
             <tr>
               <td align="center" style="padding: 0;">
-                <div style="position: relative; display: inline-block; width: 100%; max-width: 800px;">
-                  <img src="${block.src}" alt="${block.alt || ''}" style="display: block; width: 100%; max-width: 800px; height: auto; border: 0;" />
-                  ${overlayLinks}
-                </div>
+                <img src="${block.src}" alt="${block.alt || ''}" width="800" usemap="#${mapName}" style="display: block; width: 100%; max-width: 800px; height: auto; border: 0;" />
+                <map name="${mapName}">
+                    ${areas}
+                </map>
               </td>
             </tr>
           `;
@@ -64,7 +60,6 @@ export const generateHtml = (blockList: Block[], title: string = 'Newsletter') =
           const textLayer = block.content ? 
               `<!--[if !mso]><!--><div class="textLayer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">${block.content}</div><!--<![endif]-->` 
               : '';
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const mapName = `map-${block.id}`;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const areas = (block.links || []).map((link: any) => {

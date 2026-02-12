@@ -36,7 +36,33 @@ describe('HTML Generator', () => {
     it('should handle empty slices', () => {
         const html = generateHtml([]);
         expect(html).toContain('<!DOCTYPE html>');
-        // Should have table but no rows
         expect(html).not.toContain('<img src=');
+    });
+
+    it('should handle block with no buffer and no imageUrl', () => {
+        const blocks: (ProcessedBlock & { imageUrl?: string })[] = [
+            { type: 'image', width: 800, height: 100 },
+        ];
+        const html = generateHtml(blocks);
+        // src should be empty string
+        expect(html).toContain('<img src=""');
+    });
+
+    it('should handle block with no links', () => {
+        const blocks: (ProcessedBlock & { imageUrl?: string })[] = [
+            { type: 'image', buffer: Buffer.from('test'), width: 800, height: 100 },
+        ];
+        const html = generateHtml(blocks);
+        // Should NOT contain link overlays
+        expect(html).not.toContain('<a href=');
+        expect(html).toContain('<img src="data:image/png;base64,');
+    });
+
+    it('should use buffer base64 when imageUrl not provided', () => {
+        const blocks: (ProcessedBlock & { imageUrl?: string })[] = [
+            { type: 'image', buffer: Buffer.from('hello'), width: 800, height: 100 },
+        ];
+        const html = generateHtml(blocks);
+        expect(html).toContain('data:image/png;base64,aGVsbG8=');
     });
 });

@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -15,5 +16,25 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react-quill-new'],
+  },
+  test: {
+    exclude: ['tests/**', 'node_modules/**'],
+    environment: 'jsdom',
+    coverage: {
+      provider: 'v8',
+      include: ['src/**', 'server/lib/**'],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/**/*.css',
+        'src/**/*.svg',
+        'src/main.tsx',
+        'src/App.tsx',
+        'src/types.ts',
+        'src/declarations.d.ts',
+        'src/assets/**',
+        'src/services/pdf-client-processor.ts',
+        'src/components/**',
+      ],
+    },
   },
 })
