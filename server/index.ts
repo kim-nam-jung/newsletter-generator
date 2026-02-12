@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { processFile } from './lib/processor';
 import crypto from 'crypto';
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import helmet from 'helmet';
 
 const logger = {
@@ -24,9 +24,29 @@ const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
 
 // Input Validation Helpers
-const isValidFilename = (name: string) => !/[\\/:\*\?"<>|]/.test(name) && !/\.\./.test(name);
+const isValidFilename = (name: string) => !/[\\/:*?"<>|]/.test(name) && !/\.\./.test(name);
 const isValidId = (id: string) => /^[a-zA-Z0-9_-]+$/.test(id);
-const isSafePath = (p: string) => !path.normalize(p).includes('..');
+
+/**
+ * 경로가 안전한지 검증
+ * - 상대 경로 (..) 체크
+ * - 경로가 허용된 디렉토리 내에 있는지 확인
+ */
+const isSafePath = (inputPath: string, allowedRoot?: string): boolean => {
+  const normalized = path.normalize(inputPath);
+
+  // 상대 경로 탈출 방지
+  if (normalized.includes('..')) return false;
+
+  // 허용된 루트가 지정된 경우, 해당 디렉토리 내에 있는지 확인
+  if (allowedRoot) {
+    const resolved = path.resolve(allowedRoot, normalized);
+    const resolvedRoot = path.resolve(allowedRoot);
+    if (!resolved.startsWith(resolvedRoot)) return false;
+  }
+
+  return true;
+};
 
 // Configure Multer with limit from env
 const upload = multer({ 
@@ -40,7 +60,19 @@ if (!fs.existsSync('uploads')) {
 }
 
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com"], // unsafe-eval required for some dev tools/pdfjs-dist legacy
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      connectSrc: ["'self'", "https://unpkg.com"], // Allow connecting to unpkg for pdf worker
+      workerSrc: ["'self'", "blob:", "https://unpkg.com"], // Allow pdf worker from unpkg
+      mediaSrc: ["'self'"],
+      objectSrc: ["'none'"],
+    },
+  },
 }));
 app.use(express.json({ limit: '50mb' }));
 
@@ -56,9 +88,10 @@ app.get('/api/pick-folder', (_req, res) => {
     $f = New-Object System.Windows.Forms.FolderBrowserDialog;
     $f.ShowNewFolderButton = $true;
     if ($f.ShowDialog() -eq 'OK') { Write-Host $f.SelectedPath }
-  `;
+  `.replace(/\n/g, ' ').trim();
 
-  exec(`powershell -nop -c "${psCommand.replace(/\n/g, ' ')}"`, (error, stdout, stderr) => {
+  // execFile 사용으로 명령 주입 방지
+  execFile('powershell', ['-NoProfile', '-Command', psCommand], (error, stdout, stderr) => {
     if (error) {
       console.error('[API] Folder picker error:', stderr || error.message);
       return res.status(500).json({ error: 'Failed to open folder picker' });
@@ -100,6 +133,37 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const { sliceHeight } = req.body;
     const height = sliceHeight ? parseInt(sliceHeight) : 0; // Default to 0 (no slice)
 
+    // Handle PDF files specifically - Direct Save for Client-side Rendering
+    if (req.file.mimetype === 'application/pdf') {
+        console.log('[API] PDF detected. Saving original file for client-side rendering...');
+        
+        // Ensure upload directory exists
+        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+             await fs.promises.mkdir(uploadDir, { recursive: true });
+        }
+
+        // Generate safe unique filename
+        const fileName = `doc-${Date.now()}-${Math.random().toString(36).substring(7)}.pdf`;
+        const destPath = path.join(uploadDir, fileName);
+
+        // Move the file
+        await fs.promises.rename(req.file.path, destPath);
+        
+        const publicUrl = `/uploads/${fileName}`;
+        console.log(`[API] PDF saved to ${publicUrl}`);
+
+        // Return a single PDF block
+        const blocks = [{
+            type: 'pdf',
+            src: publicUrl,
+            pageIndex: 0
+        }];
+
+        return res.json({ blocks });
+    }
+
+    // Standard Image Processing Flow
     console.log('[API] processing file...');
     const { blocks } = await processFile(req.file.path, req.file.mimetype, height);
     console.log(`[API] processFile returned ${blocks.length} blocks`);
@@ -121,8 +185,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     console.log('[API] Saving images...');
     let savedCount = 0;
-    const processedBlocks = await Promise.all(blocks.map(async (block, idx) => {
-       // console.log(`[API] Saving block ${idx}...`); 
+    const processedBlocks = await Promise.all(blocks.map(async (block) => {
        if (block.type === 'image' && block.buffer) {
            const imageUrl = await saveImageSlice(block.buffer, uploadDir);
            savedCount++;
@@ -133,6 +196,12 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                links: block.links,
                width: block.width,
                height: block.height
+           };
+       } else if (block.type === 'html') {
+           return {
+               type: 'html',
+               content: block.content,
+               pageIndex: block.pageIndex
            };
        } else {
            return {

@@ -1,18 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { generateHtml } from './html-generator';
-import { ProcessedSlice } from './processor';
+import { ProcessedBlock } from './processor';
 
 describe('HTML Generator', () => {
     it('should generate valid HTML structure', () => {
-        const slices: (ProcessedSlice & { imageUrl?: string })[] = [
-            { buffer: Buffer.from('slice1'), links: [], imageUrl: '/path/to/img.png' },
+        const blocks: (ProcessedBlock & { imageUrl?: string })[] = [
+            { type: 'image', buffer: Buffer.from('slice1'), links: [], imageUrl: '/path/to/img.png', width: 800, height: 100 },
             { 
+              type: 'image',
               buffer: Buffer.from('slice2'), 
               // Links are in 1600px coordinates
-              links: [{ url: 'https://example.com', x: 20, y: 20, width: 200, height: 40, pageIndex: 0 }] 
+              links: [{ url: 'https://example.com', x: 20, y: 20, width: 200, height: 40 }],
+              width: 800,
+              height: 100
             }
         ];
-        const html = generateHtml(slices);
+        const html = generateHtml(blocks);
 
         expect(html).toContain('<!DOCTYPE html>');
         

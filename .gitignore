@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Data
+server/data/newsletters/
+server/data/settings.json
+uploads/
+.env*
+
+# System
+nul

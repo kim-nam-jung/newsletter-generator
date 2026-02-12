@@ -1,76 +1,58 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { processFile } from './processor';
 import sharp from 'sharp';
+import fs from 'fs';
+import path from 'path';
 
-
-// Mock pdf-converter
-vi.mock('./pdf-converter', () => ({
-  convertPdfToImages: vi.fn().mockImplementation(async () => {
-    // Create two dummy images (100x100 white squares)
-    const img1 = await sharp({
-      create: { width: 100, height: 100, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 1 } }
-    }).png().toBuffer();
-
-    const img2 = await sharp({
-      create: { width: 100, height: 100, channels: 4, background: { r: 0, g: 255, b: 0, alpha: 1 } }
-    }).png().toBuffer();
-
-    return {
-      images: [img1, img2],
-      links: [
-        [{ url: 'http://p1.com', x: 10, y: 10, width: 20, height: 20, pageIndex: 0 }],
-        [{ url: 'http://p2.com', x: 20, y: 20, width: 30, height: 30, pageIndex: 1 }]
-      ]
-    };
-  }),
-  LinkInfo: {}
-}));
-
-// Mock html-generator (not used in logic test but imported)
-vi.mock('./html-generator', () => ({
-  generateHtml: vi.fn()
-}));
-
-// Mock image-slicer to behave predictably
-// But processor uses real image-slicer. Let's not mock it if possible, 
-// or verify behavior with real one. 
-// image-slicer resizes to 800px width.
-// Original images are 100px width. 
-// scale = 800 / 100 = 8.
-// Page 1 height (100) -> resized height 800.
-// Page 2 height (100) -> resized height 800.
-// Total merged height = 200 (original) -> 1600 (resized).
-
-// Links:
-// P1 link: x=10, y=10. Scaled: x=80, y=80.
-// P2 link: x=20, y=20.
-// Merged P2 link Y (original) = 100 + 20 = 120.
-// Scaled P2 link Y = 120 * 8 = 960.
+const TEST_DIR = path.join(__dirname, 'test-output');
+const TEST_IMAGE_PATH = path.join(TEST_DIR, 'test_input.png');
 
 describe('Processor', () => {
-  it('should merge multiple pages and adjust link coordinates', async () => {
-    const result = await processFile('dummy.pdf', 'application/pdf', 0);
-    
-    expect(result.slices).toHaveLength(1); // Should be 1 slice because height is 0 (infinite)
-    const links = result.slices[0].links;
+  beforeAll(async () => {
+    if (!fs.existsSync(TEST_DIR)) {
+      fs.mkdirSync(TEST_DIR, { recursive: true });
+    }
+    // Create a 1600x2000 image (matches the standard width we use for processing)
+    await sharp({
+      create: {
+        width: 1600,
+        height: 2000,
+        channels: 4,
+        background: { r: 255, g: 0, b: 0, alpha: 1 }
+      }
+    })
+    .png()
+    .toFile(TEST_IMAGE_PATH);
+  });
 
-    // Verify links
-    expect(links).toHaveLength(2);
-    
-    // Validating Link 1
-    const l1 = links.find(l => l.url === 'http://p1.com');
-    expect(l1).toBeDefined();
-    // x: 10 * 8 = 80
-    // y: 10 * 8 = 80
-    expect(Math.round(l1!.x)).toBe(80);
-    expect(Math.round(l1!.y)).toBe(80);
+  afterAll(() => {
+    // Clean up
+    if (fs.existsSync(TEST_IMAGE_PATH)) {
+      fs.unlinkSync(TEST_IMAGE_PATH);
+    }
+    if (fs.existsSync(TEST_DIR)) {
+      fs.rmdirSync(TEST_DIR);
+    }
+  });
 
-    // Validating Link 2
-    const l2 = links.find(l => l.url === 'http://p2.com');
-    expect(l2).toBeDefined();
-    // x: 20 * 8 = 160
-    // y: (100 + 20) * 8 = 960
-    expect(Math.round(l2!.x)).toBe(160);
-    expect(Math.round(l2!.y)).toBe(960);
+  it('should slice a large image correctly', async () => {
+    // Slice height 500. Should get 4 slices (2000 / 500 = 4)
+    const result = await processFile(TEST_IMAGE_PATH, 'image/png', 500);
+    
+    expect(result.blocks).toHaveLength(4);
+    
+    result.blocks.forEach((block) => {
+      expect(block.type).toBe('image');
+      expect(block.width).toBe(1600);
+      expect(block.height).toBe(500);
+      // Links should be empty for pure image processing
+      expect(block.links).toEqual([]);
+    });
+  });
+
+  it('should handle small images without slicing if height is large enough', async () => {
+    const result = await processFile(TEST_IMAGE_PATH, 'image/png', 3000); // larger than 2000
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].height).toBe(2000);
   });
 });

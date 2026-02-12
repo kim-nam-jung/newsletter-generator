@@ -1,9 +1,23 @@
 import sharp from 'sharp';
 
+/**
+ * LinkInfo 타입 - 프론트엔드(src/types.ts)와 동일한 정의
+ * 서버/클라이언트 간 공유 타입으로, 변경 시 양쪽 동기화 필요
+ */
+export interface LinkInfo {
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface SliceInfo {
   buffer: Buffer;
   y: number;
   height: number;
+  width: number;
+  links: LinkInfo[];
 }
 
 export async function sliceImage(imageBuffer: Buffer, targetHeight: number): Promise<SliceInfo[]> {
@@ -27,7 +41,9 @@ export async function sliceImage(imageBuffer: Buffer, targetHeight: number): Pro
     slices.push({
       buffer: await slice.toBuffer(),
       y: y,
-      height: h
+      height: h,
+      width: 1600,
+      links: []
     });
     
     y += h;

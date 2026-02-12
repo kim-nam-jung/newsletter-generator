@@ -14,6 +14,7 @@ import { useEditorStore } from './stores/editorStore';
 import { useUIStore } from './stores/uiStore';
 import { useNewsletterStore } from './stores/newsletterStore';
 import { useDebounce } from './utils/useDebounce';
+import { generateHtml } from './utils/htmlGenerator';
 
 function App() {
   // Store Hooks
@@ -273,218 +274,9 @@ function App() {
 
 
 
-  const generateHtml = (blockList: Block[] = blocks) => {
-    const rows = blockList.map(block => {
-      if (block.type === 'image') {
-        const safeLink = block.link && isValidUrl(block.link) ? escapeHtml(block.link) : '';
-        // 단일 링크 (전체 이미지 클릭)
-        const linkStart = safeLink ? `<a href="${safeLink}" target="_blank" style="text-decoration: none; display: block;">` : '';
-        const linkEnd = safeLink ? '</a>' : '';
-
-        // PDF에서 추출된 오버레이 링크들
-        // 서버에서 1600px 기준으로 좌표가 계산되어 있고, display는 800px이므로 0.5 스케일
-        const displayScale = 0.5;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const overlayLinks = (block.links || []).map((link: any) => {
-            if (!isValidUrl(link.url)) return '';
-            const safeUrl = escapeHtml(link.url);
-            return `
-          <a href="${safeUrl}" target="_blank" style="
-            position: absolute;
-            left: ${link.x * displayScale}px;
-            top: ${link.y * displayScale}px;
-            width: ${link.width * displayScale}px;
-            height: ${link.height * displayScale}px;
-            z-index: 10;
-            cursor: pointer;
-          " title="${safeUrl}"></a>
-        `}).join('');
-
-        // 오버레이 링크가 있으면 position: relative 컨테이너 필요
-        if (overlayLinks) {
-          return `
-            <tr>
-              <td align="center" style="padding: 0;">
-                <div style="position: relative; display: inline-block; width: 100%; max-width: 800px;">
-                  <img src="${block.src}" alt="${block.alt || ''}" style="display: block; width: 100%; max-width: 800px; height: auto; border: 0;" />
-                  ${overlayLinks}
-                </div>
-              </td>
-            </tr>
-          `;
-        }
-
-        return `
-          <tr>
-            <td align="center" style="padding: 0;">
-              ${linkStart}<img src="${block.src}" alt="${block.alt || ''}" style="display: block; width: 100%; max-width: 800px; height: auto; border: 0;" />${linkEnd}
-            </td>
-          </tr>
-        `;
-      } else if (block.type === 'text') {
-        return `
-          <tr>
-            <td style="padding: 20px; font-family: sans-serif; font-size: 16px; line-height: 1.5; color: #333;">
-              ${block.content}
-            </td>
-          </tr>
-        `;
-      } else if (block.type === 'pdf') {
-          // Export as Static Image + Links + Text Layer for selection
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const pdfLinks = (block.links || []).map((link: any) => {
-             const safeUrl = escapeHtml(link.url);
-             return `
-               <a href="${safeUrl}" target="_blank" class="link-overlay" style="
-                 position: absolute;
-                 left: ${(link.x / (block.width || 600)) * 100}%;
-                 top: ${(link.y / (block.height || 800)) * 100}%;
-                 width: ${(link.width / (block.width || 600)) * 100}%;
-                 height: ${(link.height / (block.height || 800)) * 100}%;
-                 z-index: 20;
-               " title="${safeUrl}"></a>
-             `;
-          }).join('');
-
-          const textLayer = block.content ? `
-            <div class="textLayer" style="
-                width: 100%;
-                height: 100%;
-                /* Scale factor handling? 
-                   PDF.js text layer is absolute px. 
-                   We need to scale it to fit the 100% width of container (max 800px).
-                   If the original PDF width != current display width, transform scale is needed.
-                */
-                transform: scale(calc(100% / ${block.width || 800})); /* Conceptual, CSS calc with 100% doesn't work for scale like this easily without JS */
-                /* Better approach for email/static HTML: 
-                   The container width is fluid (max 800px).
-                   Text layer spans have fixed pixels.
-                   We need a transform on .textLayer.
-                   
-                   Since this is inside email/HTML export, JS execution for resize is limited.
-                   But for 'Preview' in App, it's fine.
-                   For 'Export HTML', we might have issues if client opens on different screen size.
-                   
-                   However, standard practice for HTML email is fixed width or fluid images. 
-                   Text overlay on fluid images is hard.
-                   Let's assume standard width (e.g. 600-800px) or just use the style attribute to set a fixed scale if possible, 
-                   or rely on the fact that '100%' width in CSS might match the PDF extraction width if we force min-width?
-                   
-                   Actually, let's look at PdfPageRenderer. It uses a JS ResizeObserver to set --scale-factor.
-                   In static HTML export, we don't have that.
-                   
-                   Compromise: 
-                   If export is fixed width (800px), we can hardcode scale.
-                   block.width is the original PDF width (e.g. 595pt ~ 793px).
-                   If we enforce max-width 800px, and the PDF was 800px, scale is 1.
-                   
-                   Let's inject a script for the exported HTML to handle scaling if possible? 
-                   Email clients strip JS. So export for email = no text layer usually.
-                   But user wants "Preview" text selection. Preview runs in browser (iframe).
-                   So we can inject a script!
-                */
-            ">
-                ${block.content}
-            </div>
-            <script>
-                // Simple script to scale text layer to match image width
-                (function() {
-                    function scaleTextLayers() {
-                        var containers = document.querySelectorAll('.pdf-container');
-                        containers.forEach(function(container) {
-                            var img = container.querySelector('img');
-                            var textLayer = container.querySelector('.textLayer');
-                            var originalWidth = ${block.width || 800}; // Embed original width
-                            if (img && textLayer && originalWidth) {
-                                var currentWidth = img.clientWidth;
-                                var scale = currentWidth / originalWidth;
-                                textLayer.style.transform = 'scale(' + scale + ')';
-                                textLayer.style.transformOrigin = '0 0';
-                            }
-                        });
-                    }
-                    window.addEventListener('load', scaleTextLayers);
-                    window.addEventListener('resize', scaleTextLayers);
-                })();
-            </script>
-          ` : '';
-
-          // Note: added class pdf-container for script
-          return `
-            <tr>
-               <td align="center" style="padding: 0;">
-                  <div class="pdf-container" style="position: relative; width: 100%; max-width: 800px;">
-                    <img src="${block.src}" style="width: 100%; height: auto; display: block;" />
-                    ${textLayer}
-                    ${pdfLinks}
-                  </div>
-               </td>
-            </tr>
-          `;
-      } else if (block.type === 'html') {
-          return `
-            <tr>
-               <td align="center" style="padding: 0;">
-                  ${block.content}
-               </td>
-            </tr>
-          `;
-      }
-      return '';
-    }).join('');
-
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>${title}</title>
-  <style>
-    body { font-family: sans-serif; }
-    /* Minimal PDF Text Layer CSS */
-    .textLayer {
-      position: absolute;
-      text-align: initial;
-      left: 0;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      overflow: hidden;
-      opacity: 0.2; /* Debug: set to 1 to see text, usually transparent */
-      opacity: 1; /* For selection, we want visible selection highlight but transparent text color */
-      line-height: 1.0;
-      pointer-events: none; /* Let clicks pass through to links if any? Text selection needs events. */
-    }
-    .textLayer span {
-      color: transparent;
-      position: absolute;
-      white-space: pre;
-      cursor: text;
-      transform-origin: 0% 0%;
-      pointer-events: auto; /* Allow text selection */
-    }
-    .textLayer ::selection {
-      background: rgba(0, 0, 255, 0.3);
-      color: transparent;
-    }
-    /* Link overlay style */
-    .link-overlay {
-      position: absolute;
-      z-index: 20;
-      cursor: pointer;
-    }
-  </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4;">
-  <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 800px; background-color: #ffffff; margin: 0 auto;">
-    ${rows}
-  </table>
-</body>
-</html>
-    `;
-  };
-
-  const html = generateHtml();
+  // const html = generateHtml(); -> No longer needed as local var, used in Preview/Export directly if needed
+  // However, Preview component needs `html`.
+  const html = generateHtml(blocks, title);
 
   const saveSettings = async (path: string) => {
     try {
@@ -528,7 +320,7 @@ function App() {
       })
     );
 
-    const exportHtml = generateHtml(blocksWithBase64);
+    const exportHtml = generateHtml(blocksWithBase64, title);
 
     // Case 1: Default Export Path is Set (Server-side auto-save)
     if (exportPath) {

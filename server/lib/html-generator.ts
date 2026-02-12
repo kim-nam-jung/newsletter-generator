@@ -1,15 +1,16 @@
-import { ProcessedSlice } from './processor';
+import { ProcessedBlock } from './processor';
 
-import { ProcessedSlice } from './processor';
-
-export function generateHtml(slices: (ProcessedSlice & { imageUrl?: string })[]): string {
-  const rows = slices.map(slice => {
+export function generateHtml(blocks: (ProcessedBlock & { imageUrl?: string })[]): string {
+  const rows = blocks.map(block => {
     // Start with base64 as fallback
-    let src = `data:image/png;base64,${slice.buffer.toString('base64')}`;
+    let src = '';
+    if (block.buffer) {
+        src = `data:image/png;base64,${block.buffer.toString('base64')}`;
+    }
     
     // Use URL if provided (better for invalidating cache/performance)
-    if (slice.imageUrl) {
-        src = slice.imageUrl;
+    if (block.imageUrl) {
+        src = block.imageUrl;
     }
 
     // Generate link overlays
@@ -18,7 +19,7 @@ export function generateHtml(slices: (ProcessedSlice & { imageUrl?: string })[])
     // So we must scale everything by 0.5 for CSS pixels.
     const displayScale = 0.5;
 
-    const linksHtml = slice.links.map(link => {
+    const linksHtml = (block.links || []).map(link => {
       return `
         <a href="${link.url}" target="_blank" style="
           position: absolute;

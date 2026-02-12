@@ -100,12 +100,7 @@ const buildTextLayerHtml = async (
         `;
 
         const content = escapeHtml(item.str);
-
-        if (link) {
-            spans.push(`<a href="${link.url}" target="_blank" rel="noopener noreferrer" style="${style} cursor: pointer;" title="${link.url}">${content}</a>`);
-        } else {
-            spans.push(`<span style="${style}">${content}</span>`);
-        }
+        spans.push(`<span style="${style}">${content}</span>`);
     }
 
     return spans.join('\n');
@@ -204,7 +199,7 @@ export const processPdfFile = async (file: File): Promise<MyProcessedPage[]> => 
         processedPages.push({
             src: imageSrc,
             content: textLayerHtml,
-            links: [], // 태그로 매립되었으므로 별도 링크 배열은 비움 (하위 호환성을 위해 유지하거나 제거 가능)
+            links: links, // 링크 정보를 전달하여 App.tsx에서 오버레이 생성
             width: viewport.width,
             height: viewport.height
         });

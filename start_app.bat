@@ -1,5 +1,10 @@
 @echo off
+chcp 65001 >nul
+set "LANG=en_US.UTF-8"
+set "LC_ALL=en_US.UTF-8"
+
 title Newsletter Generator Control
+
 echo ==========================================
 echo      Stopping old server processes...
 echo ==========================================
