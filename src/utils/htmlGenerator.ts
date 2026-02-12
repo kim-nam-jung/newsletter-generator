@@ -87,7 +87,7 @@ export const generateHtml = (blockList: Block[], title: string = 'Newsletter') =
             <tr>
                <td align="center" style="padding: 0;">
                   <div class="pdf-container" style="position: relative; width: 100%; max-width: 800px;">
-                    <img src="${block.src}" usemap="#${mapName}" style="width: 100%; height: auto; display: block;" border="0" />
+                    <img src="${block.src}" width="800" usemap="#${mapName}" style="width: 100%; height: auto; display: block;" border="0" />
                     ${textLayer}
                     <map name="${mapName}">
                         ${areas}
