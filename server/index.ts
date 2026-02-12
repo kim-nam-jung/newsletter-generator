@@ -21,7 +21,7 @@ async function saveImageSlice(buffer: Buffer, uploadDir: string): Promise<string
 }
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = parseInt(process.env.PORT || '3000', 10);
 
 // Input Validation Helpers
 const isValidFilename = (name: string) => !/[\\/:\*\?"<>|]/.test(name) && !/\.\./.test(name);
@@ -291,7 +291,9 @@ app.get('/api/image-base64', async (req, res) => {
   }
 
   // Security: Prevent Path Traversal
-  const normalizedPath = path.normalize(imagePath);
+  // Strip leading slash/backslash to treat as relative path
+  const cleanPath = imagePath.replace(/^[/\\]/, '');
+  const normalizedPath = path.normalize(cleanPath);
   if (normalizedPath.includes('..') || path.isAbsolute(normalizedPath)) {
       logger.error(`Blocked attempted path traversal: ${imagePath}`);
       return res.status(403).json({ error: 'Invalid path' });
