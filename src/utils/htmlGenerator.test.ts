@@ -28,9 +28,10 @@ describe('generateHtml', () => {
         // Check for usemap attribute on image
         expect(html).toContain('usemap="#map-test-block-123"');
 
-        // Check for Text Layer presence
-        expect(html).toContain('<div class="textLayer"');
+        // Check for Text Layer presence with Outlook hiding (mso)
+        expect(html).toContain('<!--[if !mso]><!--><div class="textLayer"');
         expect(html).toContain('Hello World');
+        expect(html).toContain('</div><!--<![endif]-->');
 
         // Verify NO absolute positioning overlay divs (old method) for the LINKS
         expect(html).not.toContain('class="link-overlay"');

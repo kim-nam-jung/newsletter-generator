@@ -60,8 +60,9 @@ export const generateHtml = (blockList: Block[], title: string = 'Newsletter') =
       } else if (block.type === 'pdf') {
           // Export with Image Map for maximum email client compatibility (Outlook, etc.)
           // Text Layer for text selection and searchability
+          // Hidden from Outlook (mso) to prevent layout issues, visible to others
           const textLayer = block.content ? 
-              `<div class="textLayer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">${block.content}</div>` 
+              `<!--[if !mso]><!--><div class="textLayer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">${block.content}</div><!--<![endif]-->` 
               : '';
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const mapName = `map-${block.id}`;
