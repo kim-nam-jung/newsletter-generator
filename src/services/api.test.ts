@@ -10,8 +10,12 @@ describe('API Service', () => {
         vi.restoreAllMocks();
     });
 
-    it('uploadImage should return image URLs on success', async () => {
-        const mockResponse = { images: ['/uploads/image1.png'] };
+    it('uploadImage should return blocks on success', async () => {
+        const mockResponse = { 
+            blocks: [
+                { type: 'image', src: '/uploads/image1.png', width: 800, height: 600 }
+            ] 
+        };
         const mockFetch = vi.mocked(global.fetch);
         mockFetch.mockResolvedValue({
             ok: true,
@@ -22,7 +26,7 @@ describe('API Service', () => {
         const file = new File(['dummy content'], 'test.png', { type: 'image/png' });
         const result = await uploadImage(file, 0);
 
-        expect(result).toEqual(mockResponse.images);
+        expect(result).toEqual(mockResponse.blocks);
         expect(global.fetch).toHaveBeenCalledWith('/api/upload', expect.objectContaining({
             method: 'POST',
             body: expect.any(FormData),

@@ -1,4 +1,4 @@
-import { Block } from '../types';
+import type { Block } from '../types';
 import { escapeHtml, isValidUrl } from '../utils';
 
 export const generateHtml = (blockList: Block[], title: string = 'Newsletter') => {

@@ -7,23 +7,36 @@ import path from 'path';
 describe('Upload Logic', () => {
   const testPdfPath = path.join(__dirname, 'test_vitest.pdf');
 
-  it('should process a PDF file successfully', async () => {
-    // Create PDF
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([600, 400]);
-    page.drawText('Hello Vitest!', { x: 50, y: 350, size: 30, color: rgb(0, 0.53, 0.71) });
-    const pdfBytes = await pdfDoc.save();
-    fs.writeFileSync(testPdfPath, pdfBytes);
+  it('should process an image file successfully', async () => {
+    // Create Test Image
+    const testImagePath = path.join(__dirname, 'test_upload.png');
+    // Create a simple PNG using sharp
+    const sharp = (await import('sharp')).default;
+    await sharp({
+        create: {
+          width: 800,
+          height: 600,
+          channels: 4,
+          background: { r: 255, g: 0, b: 0, alpha: 1 }
+        }
+    })
+    .png()
+    .toFile(testImagePath);
 
     // Process
-    console.log('Processing test PDF at:', testPdfPath);
-    // Note: processFile might expect a path relative to CWD or absolute. using absolute.
-    const result = await processFile(testPdfPath, 'application/pdf', 600);
+    console.log('Processing test Image at:', testImagePath);
+    const result = await processFile(testImagePath, 'image/png', 600);
     
     // Assert
     expect(result).toBeDefined();
-    expect(result.images).toBeInstanceOf(Array);
-    expect(result.images.length).toBeGreaterThan(0);
+    expect(result.blocks).toBeInstanceOf(Array);
+    expect(result.blocks.length).toBeGreaterThan(0);
+    expect(result.blocks[0].type).toBe('image');
+    
+    // Cleanup
+    if (fs.existsSync(testImagePath)) {
+      fs.unlinkSync(testImagePath);
+    }
   });
 
   afterAll(() => {

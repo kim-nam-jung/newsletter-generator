@@ -4,11 +4,9 @@ import 'pdfjs-dist/web/pdf_viewer.css';
 import { Preview } from './components/Preview';
 
 import { BlockList } from './components/Editor/BlockList';
-import type { Block } from './types';
 import { Mail, Settings, Download, FolderOpen, Trash2, Menu } from 'lucide-react';
 import { useToast } from './components/Toast';
 import { SettingsModal } from './components/SettingsModal';
-import { escapeHtml, isValidUrl } from './utils';
 
 import { useEditorStore } from './stores/editorStore';
 import { useUIStore } from './stores/uiStore';

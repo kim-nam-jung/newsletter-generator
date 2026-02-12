@@ -33,8 +33,7 @@ interface PdfTextItem {
  */
 const buildTextLayerHtml = async (
     page: pdfjsLib.PDFPageProxy,
-    viewport: pdfjsLib.PageViewport,
-    links: LinkInfo[]
+    viewport: pdfjsLib.PageViewport
 ): Promise<string> => {
     const textContent = await page.getTextContent();
 
@@ -62,30 +61,13 @@ const buildTextLayerHtml = async (
         // item.width는 PDF 좌표계의 너비이므로 scale을 곱해야 함
         const width = item.width ? item.width * viewport.scale : 0;
 
-        // 텍스트 아이템의 대략적인 Bounding Box (Viewport 좌표계)
-        // Top-Left 기준: x=vx, y=vy-fontHeight
-        const textRect = {
-            x: vx,
-            y: vy - fontHeight,
-            width: width,
-            height: fontHeight
-        };
+
 
         // 링크와의 교차 확인
         // 텍스트의 중심점이 링크 영역 안에 있는지 확인하는 방식이 가장 안전함 (단순 교차는 오탐지 가능)
         // 혹은 텍스트 영역과 링크 영역이 일정 부분 겹치는지 확인
-        const link = links.find(l => {
-            // Check if text center is inside link rect
-            const centerX = textRect.x + (textRect.width / 2);
-            const centerY = textRect.y + (textRect.height / 2);
-            
-            return (
-                centerX >= l.x && 
-                centerX <= l.x + l.width &&
-                centerY >= l.y && 
-                centerY <= l.y + l.height
-            );
-        });
+        // 링크와의 교차 확인 logic removed as 'link' was unused
+        // const link = links.find(...)
 
         const style = `
             position: absolute;
@@ -190,7 +172,7 @@ export const processPdfFile = async (file: File): Promise<MyProcessedPage[]> => 
         // -- 3. 텍스트 레이어 생성 (링크 정보 주입) --
         let textLayerHtml = '';
         try {
-            textLayerHtml = await buildTextLayerHtml(page, viewport, links);
+            textLayerHtml = await buildTextLayerHtml(page, viewport);
             console.log(`[PDF-CLIENT] Page ${i} text layer created. Length: ${textLayerHtml.length}`);
         } catch (err) {
             console.error(`[PDF-CLIENT] Text layer failed for page ${i}:`, err);
