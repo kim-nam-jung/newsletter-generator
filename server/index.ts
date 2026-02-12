@@ -100,7 +100,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const { sliceHeight } = req.body;
     const height = sliceHeight ? parseInt(sliceHeight) : 0; // Default to 0 (no slice)
 
-    const { slices } = await processFile(req.file.path, req.file.mimetype, height);
+    console.log('[API] processing file...');
+    const { blocks } = await processFile(req.file.path, req.file.mimetype, height);
+    console.log(`[API] processFile returned ${blocks.length} blocks`);
     
     // Cleanup uploaded temp file
     try {
@@ -111,25 +113,42 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         console.error('[API] Warning: Failed to delete temp file:', cleanupError);
     }
 
-    // Save slices to public/uploads
+    // Save image slices to public/uploads
     const uploadDir = path.join(process.cwd(), 'public', 'uploads');
     if (!fs.existsSync(uploadDir)) {
       await fs.promises.mkdir(uploadDir, { recursive: true });
     }
 
-    const processedSlices = await Promise.all(slices.map(async (slice) => {
-       const imageUrl = await saveImageSlice(slice.buffer, uploadDir);
-       return {
-           imageUrl,
-           links: slice.links
-       };
+    console.log('[API] Saving images...');
+    let savedCount = 0;
+    const processedBlocks = await Promise.all(blocks.map(async (block, idx) => {
+       // console.log(`[API] Saving block ${idx}...`); 
+       if (block.type === 'image' && block.buffer) {
+           const imageUrl = await saveImageSlice(block.buffer, uploadDir);
+           savedCount++;
+           if (savedCount % 10 === 0) console.log(`[API] Saved ${savedCount} images...`);
+           return {
+               type: 'image',
+               src: imageUrl,
+               links: block.links,
+               width: block.width,
+               height: block.height
+           };
+       } else {
+           return {
+               type: 'text',
+               content: block.content,
+               // links might be embedded in HTML
+           };
+       }
     }));
 
-    const imagesList = processedSlices.map(s => s.imageUrl);
-
+    // Legacy support: if pure images, return them as images list too?
+    // Frontend expects { slices } or now { blocks }
+    
+    console.log('[API] All blocks processed. Sending response.');
     res.json({ 
-        images: imagesList,
-        slices: processedSlices // New field with metadata
+        blocks: processedBlocks
     });
   } catch (error) {
     logger.error('Error processing file:', error);

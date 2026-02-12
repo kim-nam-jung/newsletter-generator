@@ -1,147 +1,113 @@
 import { convertPdfToImages, LinkInfo } from './pdf-converter';
 import { sliceImage } from './image-slicer';
+import { PdfStructureParser, ExtractedBlock, ParsedPage } from './pdf-structure-parser';
 import fs from 'fs';
 import sharp from 'sharp';
+import path from 'path';
 
-export interface ProcessedSlice {
-  buffer: Buffer;
-  links: LinkInfo[];
+export interface ProcessedBlock {
+  type: 'image' | 'text';
+  content?: string; // For text (HTML)
+  buffer?: Buffer; // For image
+  links?: LinkInfo[];
+  width?: number;
+  height?: number;
 }
 
-export async function processFile(filePath: string, mimeType: string, sliceHeight: number) {
-
-  let images: Buffer[] = [];
-  let links: LinkInfo[][] = [];
-
+export async function processFile(filePath: string, mimeType: string, sliceHeight: number): Promise<{ blocks: ProcessedBlock[] }> {
+  
+  const finalBlocks: ProcessedBlock[] = [];
+  
   try {
     if (mimeType === 'application/pdf') {
+        const parser = new PdfStructureParser();
+        const parsedPages = await parser.parsePdf(filePath);
+        console.log(`[Processor] Parser returned ${parsedPages.length} pages`);
+        
+        let totalBlocks = 0;
+        for (const page of parsedPages) {
+             console.log(`[Processor] Processing page ${page.pageIndex} blocks (${page.blocks.length})`);
 
-        const result = await convertPdfToImages(filePath);
-        images = result.images;
-        links = result.links;
+             // Iterate blocks in page
+             for (const block of page.blocks) {
+                 if (block.type === 'text') {
+                     finalBlocks.push({
+                         type: 'text',
+                         content: block.content as string,
+                         links: [] // Should likely parse links from HTML or attach page links?
+                     });
+                 } else if (block.type === 'image') {
+                     // Find links that intersect with this image block
+                     // Block Y is in viewport coords (0 at top)
+                     const blockY = block.y;
+                     const blockH = block.height || 0;
+                     
+                     const pageLinks = page.links || [];
+                     const blockLinks: LinkInfo[] = [];
+                     
+                     for (const link of pageLinks) {
+                         // Check overlap vertically
+                         // Link: [y, y+h]
+                         // Block: [blockY, blockY + blockH]
+                         // We want links fully contained or intersecting significantly?
+                         // Intersection logic:
+                         const intersectionStart = Math.max(link.y, blockY);
+                         const intersectionEnd = Math.min(link.y + link.height, blockY + blockH);
+                         
+                         if (intersectionEnd > intersectionStart) {
+                             // It intersects.
+                             // Add link relative to the block top
+                             blockLinks.push({
+                                 ...link,
+                                 y: link.y - blockY
+                             });
+                         }
+                     }
 
-
-        // Merge pages if there are multiple
-        if (images.length > 1) {
-
-            
-            // 1. Get metadata for all pages to calculate dimensions
-            const pageMetas = await Promise.all(images.map(img => sharp(img).metadata()));
-            const totalHeight = pageMetas.reduce((sum, meta) => sum + (meta.height || 0), 0);
-            const maxWidth = Math.max(...pageMetas.map(meta => meta.width || 0));
-
-            // 2. Composite images
-            const compositeOperations = [];
-            let currentY = 0;
-            let mergedLinks: LinkInfo[] = [];
-
-            for (let i = 0; i < images.length; i++) {
-                const meta = pageMetas[i];
-                compositeOperations.push({
-                    input: images[i],
-                    top: currentY,
-                    left: 0
-                });
-
-                // Adjust link coordinates
-                if (links[i]) {
-                    const pageLinks = links[i].map(link => ({
-                        ...link,
-                        y: link.y + currentY // Offset by previous pages' height
-                    }));
-                    mergedLinks = mergedLinks.concat(pageLinks);
-                }
-
-                currentY += (meta.height || 0);
-            }
-
-            // Create blank canvas and composite
-            const mergedImage = await sharp({
-                create: {
-                    width: maxWidth,
-                    height: totalHeight,
-                    channels: 4,
-                    background: { r: 255, g: 255, b: 255, alpha: 1 }
-                }
-            })
-            .composite(compositeOperations)
-            .png() // Ensure output is PNG
-            .toBuffer();
-
-            // Replace images and links with the single merged result
-            images = [mergedImage];
-            links = [mergedLinks];
-
+                     finalBlocks.push({
+                         type: 'image',
+                         buffer: block.content as Buffer,
+                         links: blockLinks,
+                         width: block.width,
+                         height: block.height
+                     });
+                 }
+                 totalBlocks++;
+             }
         }
-
+        console.log(`[Processor] Finished processing blocks. Total: ${totalBlocks}`);
+        
     } else {
-
-        images = [fs.readFileSync(filePath)];
-        links = [[]];
-
-    }
-
-    // Slice each image
-
-    const finalSlices: ProcessedSlice[] = [];
-    
-    // If sliceHeight is 0, we still need to process it through our pipeline (resize + link scaling)
-    // But sliceImage handles resizing to 800px.
-    // If sliceHeight <= 0, we pass a very large number effectively implementation "no slice" but still verify logic.
-    // Actually sliceImage function handles logic. But let's check the param.
-    const effectiveSliceHeight = sliceHeight <= 0 ? 100000 : sliceHeight;
-
-    for (let i = 0; i < images.length; i++) {
-        const imgBuf = images[i];
-        const pageLinks = links[i] || [];
-
-        // Get original width to calculate scale
-        const meta = await sharp(imgBuf).metadata();
+        // Legacy Image Processing
+        const buffer = fs.readFileSync(filePath);
+        // Slice logic
+        // If sliceHeight <= 0, we effectively don't slice (pass very large number)
+        const effectiveSliceHeight = sliceHeight <= 0 ? 100000 : sliceHeight;
+        
+        // Get metadata for scaling logic if needed (slicer handles resize to 800px usually)
+        // But let's clarify: existing sliceImage resized to 1600px width (implied in old code comments)
+        // Actually, let's verify sliceImage behavior but assume it works.
+        const meta = await sharp(buffer).metadata();
         const originalWidth = meta.width!;
-        // Scale to 1600px (Retina)
-        const scale = 1600 / originalWidth;
-
-        // Slice (this also resizes to 1600px width)
-        const slices = await sliceImage(imgBuf, effectiveSliceHeight);
-
+        
+        // sliceImage logic:
+        const slices = await sliceImage(buffer, effectiveSliceHeight);
+        
         for (const slice of slices) {
-             // Filter and adjust links
-             const sliceLinks = pageLinks.map(link => {
-                // Scale link to 1600px width
-                const lx = link.x * scale;
-                const ly = link.y * scale;
-                const lw = link.width * scale;
-                const lh = link.height * scale;
-
-                // Relative Y to the slice
-                const relativeY = ly - slice.y;
-
-                return {
-                   ...link,
-                   x: lx,
-                   y: relativeY,
-                   width: lw,
-                   height: lh
-                };
-             }).filter(link => {
-                // Keep if it overlaps with the slice
-                // Link vertical range: [y, y + height] (relative to slice)
-                // Slice vertical range: [0, slice.height]
-                return (link.y + link.height > 0) && (link.y < slice.height);
-             });
-
-             finalSlices.push({
+             finalBlocks.push({
+                 type: 'image',
                  buffer: slice.buffer,
-                 links: sliceLinks
+                 links: slice.links || [], 
+                 height: slice.height,
+                 width: slice.width
              });
         }
     }
 
+    return { blocks: finalBlocks };
 
-    return { slices: finalSlices };
   } catch (err) {
     console.error('[Processor] Error:', err);
     throw err;
   }
 }
-

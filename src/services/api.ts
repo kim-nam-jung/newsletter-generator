@@ -1,3 +1,4 @@
+// src/services/api.ts
 export interface LinkInfo {
   url: string;
   x: number;
@@ -11,22 +12,26 @@ export interface SliceInfo {
   links: LinkInfo[];
 }
 
-export interface UploadResponse {
-  images: string[];
-  slices: SliceInfo[];
+export interface BlockResponse {
+    type: 'image' | 'text';
+    content?: string; // HTML content for text blocks
+    src?: string;     // URL for image blocks
+    links?: LinkInfo[];
 }
 
-export const uploadImage = async (file: File, sliceHeight: number): Promise<SliceInfo[]> => {
+export interface UploadResponse {
+  blocks: BlockResponse[];
+}
+
+export const uploadImage = async (file: File, sliceHeight: number): Promise<BlockResponse[]> => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('sliceHeight', sliceHeight.toString());
-
 
   const response = await fetch('/api/upload', {
     method: 'POST',
     body: formData,
   });
-
 
   if (!response.ok) {
     const text = await response.text();
@@ -47,8 +52,9 @@ export const uploadImage = async (file: File, sliceHeight: number): Promise<Slic
 
   const text = await response.text();
   try {
+      // The server now returns { blocks: [...] }
       const data: UploadResponse = JSON.parse(text);
-      return data.slices;
+      return data.blocks;
   } catch {
       throw new Error(`Invalid Server Response: ${text.substring(0, 100)}...`);
   }

@@ -71,14 +71,25 @@ export const BlockList: React.FC<BlockListProps> = ({ blocks, setBlocks }) => {
   const handleInlineUpload = async (file: File, sliceHeight: number, blockId: string) => {
     setUploadingBlockId(blockId);
     try {
-      const slices = await uploadImage(file, sliceHeight);
-      const newBlocks: Block[] = slices.map(slice => ({
-        id: uuidv4(),
-        type: 'image',
-        src: slice.imageUrl,
-        alt: file.name,
-        links: slice.links
-      }));
+      const responseBlocks = await uploadImage(file, sliceHeight);
+      
+      const newBlocks: Block[] = responseBlocks.map(block => {
+          if (block.type === 'image') {
+              return {
+                  id: uuidv4(),
+                  type: 'image',
+                  src: block.src || '',
+                  alt: file.name,
+                  links: block.links || []
+              } as ImageBlock;
+          } else {
+              return {
+                  id: uuidv4(),
+                  type: 'text',
+                  content: block.content || ''
+              } as Block;
+          }
+      });
       
       setBlocks(prev => {
         const index = prev.findIndex(b => b.id === blockId);
@@ -90,11 +101,10 @@ export const BlockList: React.FC<BlockListProps> = ({ blocks, setBlocks }) => {
         return copy;
       });
       
-      showToast(`Successfully added ${slices.length} image slice(s)`, 'success');
+      showToast(`Successfully added ${newBlocks.length} block(s)`, 'success');
     } catch (error: unknown) {
       console.error(error);
-      // alert(`Upload Error: ${error instanceof Error ? error.message : String(error)}`); // Removed alert, relying on Toast
-      showToast(error instanceof Error ? error.message : 'Failed to upload image', 'error');
+      showToast(error instanceof Error ? error.message : 'Failed to upload file', 'error');
     } finally {
       setUploadingBlockId(null);
     }
