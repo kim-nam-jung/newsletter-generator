@@ -24,7 +24,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Input Validation Helpers
-const isValidFilename = (name: string) => /^[a-zA-Z0-9_\-.]+$/.test(name);
+const isValidFilename = (name: string) => !/[\\/:\*\?"<>|]/.test(name) && !/\.\./.test(name);
 const isValidId = (id: string) => /^[a-zA-Z0-9_-]+$/.test(id);
 const isSafePath = (p: string) => !path.normalize(p).includes('..');
 
